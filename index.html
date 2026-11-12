@@ -27,6 +27,7 @@
     --accent: #2f6b4f;
     --accent-ink: #ffffff;
     --warn: #b4471f;
+    --ice-1: #bfe3f2; --ice-2: #6fa9c4; --ice-3: #ffffff; --ice-bg: #d9eef7; --ice-ink: #2c6782;
     --shadow: 0 10px 30px rgba(40, 30, 10, .18);
 
     --felt-1: #4a8566;
@@ -69,6 +70,7 @@
       --accent: #7cc39c;
       --accent-ink: #0f1a14;
       --warn: #ff9f6e;
+      --ice-1: #a9d8ec; --ice-2: #4f8fae; --ice-3: #e8f7ff; --ice-bg: #1e3a47; --ice-ink: #a9d8ec;
       --shadow: 0 10px 30px rgba(0, 0, 0, .5);
       --felt-1: #2a5a43;
       --felt-2: #1a3d2c;
@@ -98,6 +100,7 @@
     --accent: #7cc39c;
     --accent-ink: #0f1a14;
     --warn: #ff9f6e;
+    --ice-1: #a9d8ec; --ice-2: #4f8fae; --ice-3: #e8f7ff; --ice-bg: #1e3a47; --ice-ink: #a9d8ec;
     --shadow: 0 10px 30px rgba(0, 0, 0, .5);
     --felt-1: #2a5a43;
     --felt-2: #1a3d2c;
@@ -240,10 +243,26 @@
   .mode-block { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: var(--surface-2); }
   .mode-block h3 { font-size: 1rem; }
   .mode-block p { margin: 0; font-size: .85rem; }
-  .diff-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-  .btn.diff { height: auto; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 1px; background: var(--surface); }
-  .btn.diff.primary { background: var(--accent); }
-  .btn.diff small { font-weight: 500; font-size: .75rem; opacity: .8; font-variant-numeric: tabular-nums; }
+  .level-list { display: flex; flex-direction: column; gap: 6px; }
+  .level {
+    display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 2px 10px; width: 100%; text-align: left;
+    padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font: inherit; color: inherit;
+  }
+  .level:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .level .num {
+    grid-row: span 2; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--surface-2); font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: .85rem;
+  }
+  .level .name { font-weight: 700; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+  .level .meta { grid-column: 2; font-size: .78rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .level .side { grid-row: 1 / span 2; grid-column: 3; text-align: right; font-size: .78rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .level .side b { display: block; color: var(--ink); font-size: .9rem; }
+  .tag { white-space: nowrap; font-size: .66rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--ink-soft); }
+  .tag.frozen { background: var(--ice-bg); color: var(--ice-ink); }
+  .level.next { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .level.next .num { background: var(--accent); color: var(--accent-ink); }
+  .level:disabled { cursor: default; opacity: .5; }
+  .level:disabled .num svg { width: 13px; height: 13px; }
   .best { color: var(--ink-soft); font-size: .8rem; min-height: 1.2em; }
 
   /* ---------- Solo clock ---------- */
@@ -315,6 +334,7 @@
     <div id="sliders"></div>
     <div class="derived" id="derived"></div>
     <label class="toggle"><input type="checkbox" id="debugToggle" checked> Show influence circles while dragging</label>
+    <label class="toggle"><input type="checkbox" id="unlockAll"> Unlock all solo levels (for testing)</label>
     <div class="legend">Solid circle = max range (no force beyond). Dashed circle = nominal break-loose distance √(k/Fs) for an average stone.</div>
     <div class="btn-row">
       <button class="btn" id="resetCfg">Reset to defaults</button>
@@ -329,13 +349,9 @@
     <h2 id="setupTitle">New game</h2>
     <section class="mode-block">
       <h3>Solo · timed</h3>
-      <p>Place all 12 stones before the clock runs out. Snapped stones go back to your tray, and the clock keeps running.</p>
+      <p>Place every stone before the clock runs out. Snapped stones go back to your tray, and the clock keeps running. Clear a level to unlock the next.</p>
       <p id="scoreRule"></p>
-      <div class="diff-row">
-        <button class="btn diff" id="soloEasy" data-diff="easy">Easy<small>2:00</small></button>
-        <button class="btn diff primary" id="soloNormal" data-diff="normal">Normal<small>1:30</small></button>
-        <button class="btn diff" id="soloHard" data-diff="hard">Hard<small>1:00</small></button>
-      </div>
+      <div class="level-list" id="levelList"></div>
       <p class="best" id="bestLine"></p>
     </section>
     <section class="mode-block">
@@ -356,6 +372,7 @@
     <p id="winnerMsg">All stones placed. Nicely done.</p>
     <div class="breakdown" id="breakdown" hidden></div>
     <div class="btn-col">
+      <button class="btn primary" id="nextLevel" hidden>Next level</button>
       <button class="btn primary" id="playAgain">Play again</button>
       <button class="btn" id="changeMode">Change mode</button>
     </div>
@@ -470,10 +487,15 @@ class UnionFind {
  * Methods that return a point/normal write it to scratch fields (ox/oy, nx/ny, qx/qy) — out params in C#.
  */
 class Rope {
-  constructor(cfg) { this.cfg = cfg; this.version = 0; this.reset(); }
+  constructor(cfg) { this.cfg = cfg; this.version = 0; this.frozen = false; this.reset(); }
 
-  reset() {
-    const c = this.cfg, n = Math.max(8, c.ropeNodes | 0), R = c.ringRadius + c.ropeHalfWidth;
+  /**
+   * scale shrinks the starting circle (smaller play area). Set `frozen` before reset: a frozen cord
+   * is a fixed wall: stones bounce off it but nothing (stones or the dragged ghost) can move it.
+   */
+  reset(scale = 1) {
+    this.scale = scale;
+    const c = this.cfg, n = Math.max(8, c.ropeNodes | 0), R = c.ringRadius * scale + c.ropeHalfWidth;
     this.n = n;
     this.x = new Float64Array(n); this.y = new Float64Array(n);
     for (let i = 0; i < n; i++) {
@@ -567,6 +589,7 @@ class Rope {
 
   /** Push cord segments out of a circle (center inside the loop) by `amount` × overlap. Returns true if moved. */
   pushOutOfCircle(cx, cy, R, amount) {
+    if (this.frozen) return false;
     const X = this.x, Y = this.y, n = this.n;
     let moved = false, sgn = 0;
     for (let i = 0; i < n; i++) {
@@ -648,6 +671,7 @@ class Rope {
    * jammed, the caller's projectCircleInside() then pushes the ghost back instead of stretching the cord.
    */
   pushFromGhost(gx, gy, R, obstacles, Rs) {
+    if (this.frozen) return;                         // caller's projectCircleInside() stops the ghost
     const iters = this.cfg.ropeIterations;
     for (let it = 0; it < iters; it++) {
       this.pushOutOfCircle(gx, gy, R, 1);
@@ -877,12 +901,26 @@ class Physics {
 
 /* --------------------------------------------------------------- 5. GameState */
 /** Phases: 'placing' → 'simulating' → ('resolving') → 'placing' | 'gameover'. */
-/** Solo timed difficulty levels (seconds for 12 stones). */
+/**
+ * Solo levels, in unlock order. areaScale shrinks the starting cord; frozen cords can't be moved.
+ * timeLimit in seconds; multiplier scales the final score.
+ */
 const SOLO_LEVELS = {
-  easy:   { label: 'Easy',   timeLimit: 120, stones: 12 },
-  normal: { label: 'Normal', timeLimit: 90,  stones: 12 },
-  hard:   { label: 'Hard',   timeLimit: 60,  stones: 12 },
+  warmup:  { label: 'Warm-up', stones: 10, timeLimit: 120, areaScale: 1,    frozen: false, multiplier: 1 },
+  easy:    { label: 'Easy',    stones: 12, timeLimit: 120, areaScale: 1,    frozen: false, multiplier: 1 },
+  normal:  { label: 'Normal',  stones: 14, timeLimit: 105, areaScale: 1,    frozen: false, multiplier: 1.5 },
+  tight:   { label: 'Tight',   stones: 14, timeLimit: 105, areaScale: 0.85, frozen: false, multiplier: 2 },
+  frozen:  { label: 'Frozen',  stones: 14, timeLimit: 90,  areaScale: 1,    frozen: true,  multiplier: 2 },
+  hard:    { label: 'Hard',    stones: 16, timeLimit: 90,  areaScale: 1,    frozen: false, multiplier: 2.5 },
+  squeeze: { label: 'Squeeze', stones: 16, timeLimit: 90,  areaScale: 0.8,  frozen: true,  multiplier: 3 },
 };
+const LEVEL_ORDER = Object.keys(SOLO_LEVELS);
+
+/** The level after `id` in unlock order, or null after the last one. */
+function nextLevel(id) {
+  const i = LEVEL_ORDER.indexOf(id);
+  return i >= 0 && i + 1 < LEVEL_ORDER.length ? LEVEL_ORDER[i + 1] : null;
+}
 
 /** Solo scoring: points per stone inside the cord at game end + bonus per tenth of a second left. */
 const SOLO_SCORING = {
@@ -891,11 +929,13 @@ const SOLO_SCORING = {
 };
 
 /** Score breakdown for a solo game. Stones on the board are always inside the cord. */
-function soloScore(stonesOnBoard, timeLeft, scoring = SOLO_SCORING) {
+function soloScore(stonesOnBoard, timeLeft, multiplier = 1, scoring = SOLO_SCORING) {
   const stonePts = stonesOnBoard * scoring.pointsPerStone;
   const tenths = Math.max(0, Math.floor(timeLeft * 10 + 1e-9));
   const timeBonus = Math.floor(tenths * scoring.bonusPerSecond / 10);
-  return { stones: stonesOnBoard, stonePts, tenths, timeBonus, total: stonePts + timeBonus };
+  const subtotal = stonePts + timeBonus;
+  // Difficulty multiplier applies to the whole subtotal; rounded so totals stay whole numbers.
+  return { stones: stonesOnBoard, stonePts, tenths, timeBonus, subtotal, multiplier, total: Math.round(subtotal * multiplier) };
 }
 
 /** m:ss.t, e.g. 83.42 -> "1:23.4". Rounds DOWN so 0.04 s left never shows as 0.1. */
@@ -915,7 +955,8 @@ class GameState {
    * result decides (empty tray -> win with 0 s left, otherwise timeout).
    */
   reset(playerCount, perPlayer, opts = {}) {
-    this.rope.reset();                                        // cord persists across turns, not games
+    this.rope.frozen = !!opts.frozen;                         // set before reset so the renderer's cache key changes
+    this.rope.reset(opts.areaScale > 0 ? opts.areaScale : 1); // cord persists across turns, not games
     this.drag = null;
     this.ropeSnap = null;                                     // a drag in progress must not restore an old-game cord
     this.mode = opts.timeLimit > 0 ? 'solo' : 'versus';
@@ -951,7 +992,10 @@ class GameState {
   }
 
   /** Current solo score (final once phase is 'gameover'). */
-  score() { return soloScore(this.stones.length, this.timeLeft); }
+  score() {
+    const lvl = SOLO_LEVELS[this.difficulty];
+    return soloScore(this.stones.length, this.timeLeft, lvl ? lvl.multiplier : 1);
+  }
 
   /** Returns null if OK, else 'outside' | 'overlap'. */
   validatePlacement(x, y) {
@@ -1017,7 +1061,8 @@ class GameState {
         if (rope.selfIntersects()) { rope.x.set(sx); rope.y.set(sy); rope.version++; break; }  // would fold: treat as jammed
         rope.projectCircleInside(nx, ny, R);
         nx = rope.ox; ny = rope.oy;
-        d.pushing = true; d.pushed = true; pushes++;
+        if (!rope.frozen) { d.pushing = true; d.pushed = true; }
+        pushes++;
         const moved = Math.hypot(nx - d.x, ny - d.y);
         d.x = nx; d.y = ny;
         if (moved < c.ghostStep * 0.1) break;                  // jammed: cord is taut against stones / board
@@ -1088,6 +1133,7 @@ class Theme {
     this.felt1 = g('--felt-1'); this.felt2 = g('--felt-2'); this.feltEdge = g('--felt-edge');
     this.speckLight = g('--felt-speck-light'); this.speckDark = g('--felt-speck-dark');
     this.rope1 = g('--rope-1'); this.rope2 = g('--rope-2'); this.rope3 = g('--rope-3'); this.ropeShadow = g('--rope-shadow');
+    this.ice1 = g('--ice-1'); this.ice2 = g('--ice-2'); this.ice3 = g('--ice-3');
     this.stoneHi = g('--stone-hi'); this.stoneMid = g('--stone-mid'); this.stoneDark = g('--stone-dark');
     this.stoneRim = g('--stone-rim'); this.stoneSpec = g('--stone-spec'); this.stoneShadow = g('--stone-shadow');
     this.ghostOk = g('--ghost-ok'); this.ghostBad = g('--ghost-bad');
@@ -1160,7 +1206,9 @@ class Renderer {
     if (!this.ropeLayer) this.ropeLayer = document.createElement('canvas');
     const c = this.ropeLayer;
     if (c.width !== this.canvas.width || c.height !== this.canvas.height) { c.width = this.canvas.width; c.height = this.canvas.height; }
-    const g = c.getContext('2d'), S = this.S, t = this.t;
+    const g = c.getContext('2d'), S = this.S, th = this.t;
+    // Frozen cords use the icy palette so it's obvious they can't be moved.
+    const t = rope.frozen ? { ropeShadow: th.ropeShadow, rope1: th.ice1, rope2: th.ice2, rope3: th.ice3 } : th;
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, c.width, c.height);
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     const w = 2 * this.cfg.ropeHalfWidth * S;
@@ -1429,8 +1477,22 @@ const TUNABLES = [
 ];
 
 /** Best solo time-left per difficulty, kept in this browser only. Storage may be unavailable. */
+/** How far the player has unlocked (index into LEVEL_ORDER). Browser-only; defaults to the first level. */
+const Progress = {
+  key: 'stonesAttract.v2.unlocked',
+  get() {
+    try { const v = parseInt(localStorage.getItem(this.key), 10); return Number.isFinite(v) ? Math.max(0, Math.min(v, LEVEL_ORDER.length - 1)) : 0; }
+    catch (e) { return 0; }
+  },
+  unlock(index) {
+    if (index <= this.get()) return false;
+    try { localStorage.setItem(this.key, String(index)); } catch (e) { /* not saved */ }
+    return true;
+  },
+};
+
 const Best = {
-  key: (diff) => `stonesAttract.bestScore.${diff}`,
+  key: (diff) => `stonesAttract.v2.best.${diff}`,
   get(diff) {
     try { const v = parseFloat(localStorage.getItem(this.key(diff))); return Number.isFinite(v) ? v : null; }
     catch (e) { return null; }
@@ -1485,17 +1547,28 @@ class UI {
     $('#resetCfg').addEventListener('click', () => { app.cfg.reset(); this.refreshConfig(); this.toast('Defaults restored'); });
     $('#copyCfg').addEventListener('click', () => this.copyConfig());
     $('#debugToggle').addEventListener('change', (e) => { app.showRanges = e.target.checked; });
+    $('#unlockAll').addEventListener('change', (e) => { app.unlockAll = e.target.checked; this.renderLevels(); });
     // New-game sheet
     const setup = $('#setup');
-    const openSetup = () => { app.sfx.unlock(); setPanel(false); this.hideWinner(); this.renderBest(); setup.classList.add('show'); $('#soloNormal').focus(); };
+    const openSetup = () => {
+      app.sfx.unlock(); setPanel(false); this.hideWinner(); this.renderLevels(); setup.classList.add('show');
+      const target = $('#levelList .level.next') || $('#levelList .level:not(:disabled)');
+      if (target) target.focus();
+    };
     const closeSetup = () => setup.classList.remove('show');
     $('#gameBtn').addEventListener('click', openSetup);
     $('#changeMode').addEventListener('click', openSetup);
     $('#setupClose').addEventListener('click', closeSetup);
     setup.addEventListener('click', (e) => { if (e.target === setup) closeSetup(); });
-    for (const b of setup.querySelectorAll('[data-diff]')) {
-      b.addEventListener('click', () => { closeSetup(); app.newSolo(b.dataset.diff); });
-    }
+    $('#levelList').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-level]');
+      if (!b || b.disabled) return;
+      closeSetup(); app.newSolo(b.dataset.level);
+    });
+    $('#nextLevel').addEventListener('click', () => {
+      const nxt = nextLevel(app.game.difficulty);
+      if (nxt && app.isUnlocked(nxt)) app.newSolo(nxt);
+    });
     $('#newGame').addEventListener('click', () => {
       closeSetup();
       app.newGame(parseInt($('#selPlayers').value, 10), parseInt($('#selStones').value, 10));
@@ -1608,7 +1681,7 @@ class UI {
     const g = this.app.game, cur = g.current, solo = g.mode === 'solo';
     const color = (p) => `var(--p${p + 1})`;
     $('#turnDot').style.setProperty('--pc', color(cur));
-    $('#turnTitle').textContent = solo ? `Solo · ${SOLO_LEVELS[g.difficulty].label}` : `Player ${cur + 1}`;
+    $('#turnTitle').textContent = solo ? `Level ${LEVEL_ORDER.indexOf(g.difficulty) + 1} · ${SOLO_LEVELS[g.difficulty].label}` : `Player ${cur + 1}`;
     $('#turnSub').textContent = {
       placing: solo ? 'Place every stone before time runs out' : 'Drag a stone from your tray',
       simulating: 'Magnets settling…',
@@ -1621,7 +1694,8 @@ class UI {
     if (solo) {
       this.renderClock();
       const sc = g.score();
-      $('#clockScore').textContent = (g.phase === 'gameover' ? sc.total : sc.stonePts).toLocaleString();
+      // During play: stone points with the level multiplier (time bonus is added at the end).
+      $('#clockScore').textContent = (g.phase === 'gameover' ? sc.total : Math.round(sc.stonePts * sc.multiplier)).toLocaleString();
     }
 
     const scores = $('#scores');
@@ -1640,6 +1714,9 @@ class UI {
     tray.style.setProperty('--pc', color(cur));
     $('#trayDot').style.setProperty('--pc', color(cur));
     $('#trayLabel').textContent = solo ? 'Your tray' : `Player ${cur + 1}'s tray`;
+    $('#trayHint').textContent = g.rope.frozen
+      ? 'Drag a stone inside the cord. This cord is frozen and won’t move.'
+      : 'Drag a stone inside the cord. Slide it outward to stretch the cord.';
     const n = g.counts[cur];
     $('#trayCount').textContent = `${n} left`;
     tray.classList.toggle('disabled', g.phase !== 'placing');
@@ -1671,14 +1748,34 @@ class UI {
     $('#clock').setAttribute('aria-label', `${Math.ceil(g.timeLeft)} seconds left`);
   }
 
-  renderBest() {
-    const sc = SOLO_SCORING;
-    $('#scoreRule').textContent = `Score: ${sc.pointsPerStone} per stone inside the cord, plus ${sc.bonusPerSecond} per second left on the clock.`;
-    const parts = Object.keys(SOLO_LEVELS).map(k => {
-      const b = Best.get(k);
-      return b == null ? null : `${SOLO_LEVELS[k].label} ${b.toLocaleString()}`;
-    }).filter(Boolean);
-    $('#bestLine').textContent = parts.length ? `Best scores: ${parts.join(' · ')}` : 'No solo scores yet.';
+  /** Level list in the New sheet: locked levels are disabled; the furthest unlocked one is highlighted. */
+  renderLevels() {
+    const app = this.app, sc = SOLO_SCORING;
+    $('#scoreRule').textContent = `Score: ${sc.pointsPerStone} per stone inside the cord, plus ${sc.bonusPerSecond} per second left on the clock, times the level multiplier.`;
+    const host = $('#levelList');
+    host.replaceChildren();
+    const furthest = app.unlockAll ? -1 : Progress.get();
+    const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+    LEVEL_ORDER.forEach((id, i) => {
+      const lvl = SOLO_LEVELS[id], open = app.isUnlocked(id), best = Best.get(id);
+      const b = mk('button', 'level' + (i === furthest ? ' next' : ''));
+      b.type = 'button'; b.dataset.level = id; b.disabled = !open;
+      const num = mk('span', 'num');
+      if (open) num.textContent = String(i + 1);
+      else num.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+      const name = mk('span', 'name', lvl.label);
+      if (lvl.areaScale < 1) name.appendChild(mk('span', 'tag', `${Math.round(lvl.areaScale * 100)}% area`));
+      if (lvl.frozen) name.appendChild(mk('span', 'tag frozen', 'Frozen cord'));
+      const meta = mk('span', 'meta', `${lvl.stones} stones · ${formatClock(lvl.timeLimit).replace(/\.0$/, '')} · ×${lvl.multiplier}`);
+      const side = mk('span', 'side');
+      if (!open) side.textContent = 'Locked';
+      else if (best != null) { side.appendChild(mk('b', null, best.toLocaleString())); side.appendChild(document.createTextNode('best')); }
+      else side.textContent = 'New';
+      b.append(num, name, meta, side);
+      b.setAttribute('aria-label', `Level ${i + 1}, ${lvl.label}: ${meta.textContent}${open ? (best != null ? `, best ${best}` : '') : ', locked'}`);
+      host.appendChild(b);
+    });
+    $('#bestLine').textContent = app.unlockAll ? 'All levels unlocked for testing (Tune panel).' : '';
   }
 
   showWinner(player) {
@@ -1686,12 +1783,15 @@ class UI {
     $('#winnerText').textContent = `Player ${player + 1} wins!`;
     $('#winnerMsg').textContent = 'All stones placed. Nicely done.';
     $('#breakdown').hidden = true;
+    $('#nextLevel').hidden = true;
+    $('#playAgain').classList.add('primary');
+    $('#playAgain').textContent = 'Play again';
     $('#winner').classList.add('show');
     $('#playAgain').focus();
   }
 
   /** sc: soloScore() result. Builds the breakdown with DOM nodes (no innerHTML from data). */
-  showSoloResult(outcome, sc, isBest, prevBest, left) {
+  showSoloResult(outcome, sc, isBest, prevBest, left, unlockedNow = null) {
     $('#winnerDot').style.setProperty('--pc', outcome === 'cleared' ? 'var(--p1)' : 'var(--warn)');
     if (outcome === 'cleared') {
       $('#winnerText').textContent = 'Cleared!';
@@ -1704,6 +1804,7 @@ class UI {
     const rows = [
       [`Stones in the cord (${sc.stones} × ${SOLO_SCORING.pointsPerStone})`, n(sc.stonePts)],
       [`Time bonus (${formatClock((sc.tenths + 0.5) / 10)} × ${SOLO_SCORING.bonusPerSecond}/s)`, n(sc.timeBonus)],
+      [`${SOLO_LEVELS[this.app.game.difficulty].label} multiplier (${n(sc.subtotal)} × ${sc.multiplier})`, `×${sc.multiplier}`],
       ['Total', n(sc.total)],
     ];
     const box = $('#breakdown');
@@ -1722,9 +1823,22 @@ class UI {
       ? (prevBest == null ? 'First best score on this level.' : `New best! Previous: ${n(prevBest)}.`)
       : (prevBest == null ? 'No best score on this level yet.' : `Best on this level: ${n(prevBest)}.`);
     box.appendChild(note);
+    if (unlockedNow) {
+      const u = document.createElement('span');
+      u.className = 'note';
+      u.textContent = `Unlocked: Level ${LEVEL_ORDER.indexOf(unlockedNow) + 1} · ${SOLO_LEVELS[unlockedNow].label}`;
+      box.appendChild(u);
+    }
     box.hidden = false;
+    // "Next level" leads when the next level is open and this one was cleared.
+    const nxt = nextLevel(this.app.game.difficulty);
+    const showNext = outcome === 'cleared' && !!nxt && this.app.isUnlocked(nxt);
+    $('#nextLevel').hidden = !showNext;
+    if (showNext) $('#nextLevel').textContent = `Next: ${SOLO_LEVELS[nxt].label}`;
+    $('#playAgain').classList.toggle('primary', !showNext);
+    $('#playAgain').textContent = outcome === 'cleared' ? 'Replay level' : 'Try again';
     $('#winner').classList.add('show');
-    $('#playAgain').focus();
+    (showNext ? $('#nextLevel') : $('#playAgain')).focus();
   }
   hideWinner() { $('#winner').classList.remove('show'); }
 }
@@ -1742,6 +1856,7 @@ class App {
     this.drag = null;          // ghost state for the renderer (GameState.drag)
     this.dragTarget = null;    // latest pointer position in board units
     this.showRanges = true;
+    this.unlockAll = false;    // Tune panel testing switch; not saved
     this.highlight = null;
     this.acc = 0;
     this.last = 0;
@@ -1791,9 +1906,12 @@ class App {
     return true;
   }
 
-  newSolo(diff) {
-    const lvl = SOLO_LEVELS[diff] || SOLO_LEVELS.normal;
-    this.newGame(1, lvl.stones, { timeLimit: lvl.timeLimit, difficulty: SOLO_LEVELS[diff] ? diff : 'normal' });
+  isUnlocked(id) { return this.unlockAll || LEVEL_ORDER.indexOf(id) <= Progress.get(); }
+
+  newSolo(id) {
+    if (!SOLO_LEVELS[id]) id = LEVEL_ORDER[0];
+    const lvl = SOLO_LEVELS[id];
+    this.newGame(1, lvl.stones, { timeLimit: lvl.timeLimit, difficulty: id, areaScale: lvl.areaScale, frozen: lvl.frozen });
   }
 
   newGame(players, perPlayer, opts = {}) {
@@ -1869,8 +1987,12 @@ class App {
     const prev = Best.get(g.difficulty);
     const isBest = sc.total > 0 && (prev == null || sc.total > prev);   // a zero never becomes a best
     if (isBest) Best.set(g.difficulty, sc.total);
+    // Clearing a level unlocks the next one (saved in this browser).
+    let unlockedNow = null;
+    const nxt = nextLevel(g.difficulty);
+    if (g.outcome === 'cleared' && nxt && Progress.unlock(LEVEL_ORDER.indexOf(nxt))) unlockedNow = nxt;
     this.ui.render();                                 // clock row switches to the final total
-    this.ui.showSoloResult(g.outcome, sc, isBest, prev, g.counts[0]);
+    this.ui.showSoloResult(g.outcome, sc, isBest, prev, g.counts[0], unlockedNow);
   }
 }
 

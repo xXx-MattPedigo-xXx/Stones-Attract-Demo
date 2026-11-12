@@ -5,7 +5,7 @@ Public demo for Stones Attract mobile game.
 
 Place magnetic stones inside the cord without letting them snap together. If stones snap, you take them all back. Push the cord outward with a stone to reshape the play area.
 
-- **Solo (timed):** place all 12 stones before the clock runs out. Easy 2:00, Normal 1:30, Hard 1:00. Score 100 per stone inside the cord plus 10 per second left on the clock.
+- **Solo (timed):** 7 levels that unlock in order. Later levels add more stones, a smaller play area and frozen cords that can't be pushed. Score = (100 per stone inside the cord + 10 per second left) × the level multiplier.
 - **Pass & play:** 2–4 players on one device. First to empty their tray wins.
 
 Tap **New** to pick a mode.
