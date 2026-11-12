@@ -39,6 +39,8 @@
     --rope-2: #9c7744;
     --rope-3: #f2dfb3;
     --rope-shadow: rgba(0, 0, 0, .35);
+    --island-fill: rgba(14, 34, 24, .55);
+    --island-hatch: rgba(255, 255, 255, .13);
 
     --stone-hi: #cdd2d9;
     --stone-mid: #50555d;
@@ -81,6 +83,8 @@
       --rope-2: #7a5b32;
       --rope-3: #dcc28f;
       --rope-shadow: rgba(0, 0, 0, .55);
+      --island-fill: rgba(0, 0, 0, .5);
+      --island-hatch: rgba(255, 255, 255, .08);
       --stone-shadow: rgba(0, 0, 0, .6);
       --range: rgba(255, 255, 255, .18);
       --p1: #f07a5e;
@@ -111,6 +115,8 @@
     --rope-2: #7a5b32;
     --rope-3: #dcc28f;
     --rope-shadow: rgba(0, 0, 0, .55);
+    --island-fill: rgba(0, 0, 0, .5);
+    --island-hatch: rgba(255, 255, 255, .08);
     --stone-shadow: rgba(0, 0, 0, .6);
     --range: rgba(255, 255, 255, .18);
     --p1: #f07a5e;
@@ -487,20 +493,28 @@ class UnionFind {
  * Methods that return a point/normal write it to scratch fields (ox/oy, nx/ny, qx/qy) — out params in C#.
  */
 class Rope {
-  constructor(cfg) { this.cfg = cfg; this.version = 0; this.frozen = false; this.reset(); }
+  constructor(cfg) {
+    this.cfg = cfg; this.version = 0; this.frozen = false;
+    this.kind = 'outer';     // 'outer' | 'island' (inside off-limits) | 'pen' (inside playable)
+    this.minRatio = 0;       // slack limit override (0 = cfg.ropeMinRatio); inner cords use INNER_MIN_RATIO
+    this.reset();
+  }
 
   /**
    * scale shrinks the starting circle (smaller play area). Set `frozen` before reset: a frozen cord
    * is a fixed wall: stones bounce off it but nothing (stones or the dragged ghost) can move it.
+   * r > 0: start as a circle with INNER-edge radius r centered at (cx, cy) (inner cords); scale is then ignored.
    */
-  reset(scale = 1) {
-    this.scale = scale;
-    const c = this.cfg, n = Math.max(8, c.ropeNodes | 0), R = c.ringRadius * scale + c.ropeHalfWidth;
+  reset(scale = 1, cx = 0.5, cy = 0.5, r = 0) {
+    this.scale = scale; this.cx = cx; this.cy = cy;
+    const c = this.cfg, R = (r > 0 ? r : c.ringRadius * scale) + c.ropeHalfWidth;
+    // Inner cords keep roughly the outer cord's segment length (short loops of tiny segments converge badly).
+    const n = r > 0 ? Math.max(24, Math.round((c.ropeNodes | 0) * R / (c.ringRadius + c.ropeHalfWidth))) : Math.max(8, c.ropeNodes | 0);
     this.n = n;
     this.x = new Float64Array(n); this.y = new Float64Array(n);
     for (let i = 0; i < n; i++) {
       const a = i / n * Math.PI * 2;
-      this.x[i] = 0.5 + Math.cos(a) * R; this.y[i] = 0.5 + Math.sin(a) * R;
+      this.x[i] = cx + Math.cos(a) * R; this.y[i] = cy + Math.sin(a) * R;
     }
     this.rest = 2 * R * Math.sin(Math.PI / n);
     this.restPerimeter = this.rest * n;
@@ -556,7 +570,7 @@ class Rope {
   /** Inward unit normal of segment i → nx/ny. */
   inwardNormal(i, sgn) {
     const j = (i + 1) % this.n, dx = this.x[j] - this.x[i], dy = this.y[j] - this.y[i], l = Math.hypot(dx, dy);
-    if (l < 1e-12) { this.nx = 0.5 - this.x[i]; this.ny = 0.5 - this.y[i]; const m = Math.hypot(this.nx, this.ny) || 1; this.nx /= m; this.ny /= m; return; }
+    if (l < 1e-12) { this.nx = this.cx - this.x[i]; this.ny = this.cy - this.y[i]; const m = Math.hypot(this.nx, this.ny) || 1; this.nx /= m; this.ny /= m; return; }
     this.nx = -dy / l * sgn; this.ny = dx / l * sgn;
   }
 
@@ -580,6 +594,36 @@ class Rope {
     return R + d;
   }
 
+  /**
+   * Side-aware penetration: inside=true is penetration() (circle must sit inside the loop); inside=false
+   * means the circle must stay OUTSIDE (stone next to an island / outside a pen). Direction → nx/ny.
+   * A center already on the wrong side is pushed back across the nearest segment.
+   */
+  penetrationSide(px, py, R, inside) {
+    if (inside) return this.penetration(px, py, R);
+    if (!this.contains(px, py)) {
+      const d = this.closest(px, py, R);
+      if (d >= R) return 0;
+      if (d > 1e-9) { this.nx = (px - this.qx) / d; this.ny = (py - this.qy) / d; }
+      else { this.inwardNormal(this.ci, this.orientation()); this.nx = -this.nx; this.ny = -this.ny; }
+      return R - d;
+    }
+    const d = this.closest(px, py);
+    this.inwardNormal(this.ci, this.orientation());
+    this.nx = -this.nx; this.ny = -this.ny;
+    return R + d;
+  }
+
+  /** Move a circle (contact radius R) until it sits on the given side of the loop → ox/oy. */
+  projectCircleSide(cx, cy, R, inside, iters = 6) {
+    for (let k = 0; k < iters; k++) {
+      const p = this.penetrationSide(cx, cy, R, inside);
+      if (p <= 1e-12) break;
+      cx += this.nx * (p + 1e-7); cy += this.ny * (p + 1e-7);
+    }
+    this.ox = cx; this.oy = cy;
+  }
+
   /** Move the point at param t on segment i by (dx,dy), split between its two nodes (PBD style). */
   moveSegPoint(i, t, dx, dy) {
     const j = (i + 1) % this.n, a = 1 - t, b = t, w = a * a + b * b;
@@ -587,8 +631,11 @@ class Rope {
     this.x[j] += dx * b / w; this.y[j] += dy * b / w;
   }
 
-  /** Push cord segments out of a circle (center inside the loop) by `amount` × overlap. Returns true if moved. */
-  pushOutOfCircle(cx, cy, R, amount) {
+  /**
+   * Push cord segments out of a circle by `amount` × overlap. Returns true if moved. fromOutside: the
+   * circle is outside the loop (only matters when its center sits exactly on the centerline).
+   */
+  pushOutOfCircle(cx, cy, R, amount, fromOutside = false) {
     if (this.frozen) return false;
     const X = this.x, Y = this.y, n = this.n;
     let moved = false, sgn = 0;
@@ -603,7 +650,7 @@ class Rope {
       if (d >= R) continue;
       let ux, uy;
       if (d > 1e-9) { ux = (qx - cx) / d; uy = (qy - cy) / d; }
-      else { if (!sgn) sgn = this.orientation(); this.inwardNormal(i, sgn); ux = -this.nx; uy = -this.ny; }
+      else { if (!sgn) sgn = this.orientation(); this.inwardNormal(i, sgn); ux = fromOutside ? this.nx : -this.nx; uy = fromOutside ? this.ny : -this.ny; }
       const push = (R - d) * amount;
       this.moveSegPoint(i, t, ux * push, uy * push);
       moved = true;
@@ -614,7 +661,7 @@ class Rope {
 
   /** Gauss-Seidel length constraints, alternating sweep direction so tension travels both ways round. */
   solveLength(iters) {
-    const X = this.x, Y = this.y, n = this.n, rest = this.rest, minL = rest * this.cfg.ropeMinRatio;
+    const X = this.x, Y = this.y, n = this.n, rest = this.rest, minL = rest * (this.minRatio > 0 ? this.minRatio : this.cfg.ropeMinRatio);
     for (let it = 0; it < iters; it++) {
       const fwd = (it & 1) === 0;
       for (let k = 0; k < n; k++) {
@@ -670,12 +717,12 @@ class Rope {
    * obstacles the cord can't pass through. The final length-only passes make the cord win: if it is
    * jammed, the caller's projectCircleInside() then pushes the ghost back instead of stretching the cord.
    */
-  pushFromGhost(gx, gy, R, obstacles, Rs) {
+  pushFromGhost(gx, gy, R, obstacles, Rs, fromOutside = false) {
     if (this.frozen) return;                         // caller's projectCircleInside() stops the ghost
     const iters = this.cfg.ropeIterations;
     for (let it = 0; it < iters; it++) {
-      this.pushOutOfCircle(gx, gy, R, 1);
-      for (let k = 0; k < obstacles.length; k++) this.pushOutOfCircle(obstacles[k].x, obstacles[k].y, Rs, 1);
+      this.pushOutOfCircle(gx, gy, R, 1, fromOutside);
+      for (let k = 0; k < obstacles.length; k++) this.pushOutOfCircle(obstacles[k].x, obstacles[k].y, Rs, 1, !this.contains(obstacles[k].x, obstacles[k].y));
       this.solveLength(2);
       this.clampToBoard();
     }
@@ -683,7 +730,77 @@ class Rope {
     this.clampToBoard();
     this.version++;
   }
+
+  /**
+   * Keep every node of A at least `sep` from B's centerline, on the required side of B (needInside:
+   * A's nodes must lie inside B). Correction is split by mobility: frozen cords never move, two movable
+   * ones share it. Returns true if anything moved.
+   */
+  static separatePair(A, B, needInside, sep) {
+    const wA = A.frozen ? 0 : (B.frozen ? 1 : 0.5), wB = B.frozen ? 0 : (A.frozen ? 1 : 0.5);
+    if (wA === 0 && wB === 0) return false;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let i = 0; i < B.n; i++) {
+      if (B.x[i] < x0) x0 = B.x[i]; if (B.x[i] > x1) x1 = B.x[i];
+      if (B.y[i] < y0) y0 = B.y[i]; if (B.y[i] > y1) y1 = B.y[i];
+    }
+    x0 -= sep; y0 -= sep; x1 += sep; y1 += sep;
+    const sgn = B.orientation();
+    let moved = false;
+    for (let i = 0; i < A.n; i++) {
+      const px = A.x[i], py = A.y[i];
+      const near = px > x0 && px < x1 && py > y0 && py < y1;
+      if (!near && !needInside) continue;            // far outside B and allowed to be: nothing to do
+      const inB = near && B.contains(px, py);
+      let pen, nx, ny;
+      if (inB === needInside) {                      // right side: only check clearance
+        const d = B.closest(px, py, sep);
+        if (d >= sep) continue;
+        if (d > 1e-9) { nx = (px - B.qx) / d; ny = (py - B.qy) / d; }
+        else { B.inwardNormal(B.ci, sgn); nx = needInside ? B.nx : -B.nx; ny = needInside ? B.ny : -B.ny; }
+        pen = sep - d;
+      } else {                                       // crossed: push back over the nearest segment
+        const d = B.closest(px, py);
+        B.inwardNormal(B.ci, sgn);
+        nx = needInside ? B.nx : -B.nx; ny = needInside ? B.ny : -B.ny;
+        pen = sep + d;
+      }
+      if (wA > 0) { A.x[i] += nx * pen * wA; A.y[i] += ny * pen * wA; }
+      if (wB > 0) B.moveSegPoint(B.ci, B.ct, -nx * pen * wB, -ny * pen * wB);
+      moved = true;
+    }
+    if (moved) { if (wA > 0) A.version++; if (wB > 0) B.version++; }
+    return moved;
+  }
+
+  /**
+   * cords[0] is the outer cord, the rest are inner cords. Inner cords stay inside the outer one and
+   * outside each other, with centerlines >= sep apart. Alternates separation and length solves; ends
+   * with a separation pass so the no-overlap rule wins over tiny length errors. Returns true if moved.
+   */
+  static separateAll(cords, sep, iters = 4) {
+    let movedAny = false;
+    for (let it = 0; it <= iters; it++) {
+      let moved = false;
+      for (let a = 0; a < cords.length; a++) {
+        for (let b = a + 1; b < cords.length; b++) {
+          const A = cords[a], B = cords[b];
+          if (A.frozen && B.frozen) continue;
+          if (Rope.separatePair(B, A, a === 0, sep)) moved = true;   // B inside the outer / outside another inner
+          if (Rope.separatePair(A, B, false, sep)) moved = true;      // A's nodes outside B
+        }
+      }
+      if (!moved) break;
+      movedAny = true;
+      if (it === iters) break;
+      for (const c of cords) if (!c.frozen) { c.solveLength(4); c.clampToBoard(); }
+    }
+    return movedAny;
+  }
 }
+
+/** Inner cords barely go slack: pushing one in bulges it out elsewhere (perimeter stays ~fixed). */
+const INNER_MIN_RATIO = 0.985;
 
 /* ----------------------------------------------------------------- 4. Physics */
 /**
@@ -695,6 +812,7 @@ class Physics {
   constructor(cfg, rope = null) {
     this.cfg = cfg;
     this.rope = rope || new Rope(cfg);   // normally GameState.rope (shared, persists across turns)
+    this.inner = [];                     // inner cords (GameState.inner): islands / pens
     this.stones = [];
     this.uf = new UnionFind(0);
     this.time = 0;          // simulated seconds this turn
@@ -704,9 +822,20 @@ class Physics {
   }
 
   /** Call right after a stone is placed. All stones start as singletons (old clusters were removed). */
-  beginTurn(stones, rope = null) {
+  beginTurn(stones, rope = null, inner = null) {
     const n = stones.length;
     if (rope) this.rope = rope;
+    if (inner) this.inner = inner;
+    const m = this.inner.length;
+    // Which side of each inner cord every stone is on. Placements are validated, so this is unambiguous
+    // now and stays fixed for the turn: a fast stone can never be "re-classified" onto the other side.
+    this.side = new Uint8Array(n * m);               // 1 = inside (pens only), 0 = outside
+    for (let i = 0; i < n; i++) for (let k = 0; k < m; k++) {
+      const cd = this.inner[k];
+      this.side[i * m + k] = cd.kind === 'pen' && cd.contains(stones[i].x, stones[i].y) ? 1 : 0;
+    }
+    this.cords = [this.rope, ...this.inner];
+    this.snapX = this.cords.map(c => new Float64Array(c.n)); this.snapY = this.cords.map(c => new Float64Array(c.n));
     this.stones = stones;
     this.uf = new UnionFind(n);
     this.time = 0; this.calmTime = 0; this.snapCount = 0;
@@ -716,7 +845,24 @@ class Physics {
     this.aVx = new Float64Array(n); this.aVy = new Float64Array(n);
     this.wPen = new Float64Array(n); this.wNx = new Float64Array(n); this.wNy = new Float64Array(n);
     // A ghost push (or a cancelled one) can leave the cord pressing into resting stones: settle that first.
-    this.dentRope(); this.resolveWalls();
+    this.saveCords(); this.dentRope(); this.settleCords(); this.resolveWalls();
+  }
+
+  /** Copy every cord into the scratch snapshot (so a step that would fold a cord can be undone). */
+  saveCords() {
+    for (let k = 0; k < this.cords.length; k++) { this.snapX[k].set(this.cords[k].x); this.snapY[k].set(this.cords[k].y); }
+  }
+
+  /** Inner cords: keep cords apart (and inside the outer one); undo the step's cord moves if any loop folded. */
+  settleCords() {
+    if (!this.inner.length) return;
+    const cords = this.cords;
+    Rope.separateAll(cords, 4 * this.cfg.ropeHalfWidth);
+    for (let k = 0; k < cords.length; k++) {
+      if (cords[k].frozen || !cords[k].selfIntersects()) continue;
+      for (let j = 0; j < cords.length; j++) { cords[j].x.set(this.snapX[j]); cords[j].y.set(this.snapY[j]); cords[j].version++; }
+      return;
+    }
   }
 
   isSettled() { return this.calmTime >= this.cfg.settleTime || this.time >= this.cfg.maxSimTime; }
@@ -756,6 +902,9 @@ class Physics {
       aVx[r] = s[i].vx; aVy[r] = s[i].vy;           // all members share velocity
     }
 
+    // 2b) Cords push back: drop force components that press a cluster into a cord it touches (normal force).
+    if (this.inner.length) this.wallSupport();
+
     // 3) Integrate each cluster with static + kinetic friction and damping.
     const damp = 1 / (1 + c.damping * dt);
     for (let r = 0; r < n; r++) {
@@ -792,7 +941,13 @@ class Physics {
 
     // 5) Contacts → snap; 6) stones dent the cord, the (inextensible) cord pushes them back.
     this.resolveCollisions();
-    this.dentRope();
+    if (this.inner.length) {
+      this.saveCords();
+      let v0 = 0; for (const cd of this.cords) v0 += cd.version;
+      this.dentRope();
+      let v1 = 0; for (const cd of this.cords) v1 += cd.version;
+      if (v1 !== v0) this.settleCords();
+    } else this.dentRope();
     this.resolveWalls();
 
     // 7) Settle tracking.
@@ -800,6 +955,38 @@ class Physics {
     for (let i = 0; i < n; i++) maxSp = Math.max(maxSp, Math.hypot(s[i].vx, s[i].vy));
     this.time += dt;
     this.calmTime = maxSp < c.settleSpeed ? this.calmTime + dt : 0;
+  }
+
+  /**
+   * Inner-cord levels only: a cord a cluster rests against supplies a normal force, so magnets pressing
+   * stones into it (e.g. two stones attracting across a pen or island cord) can't keep them bouncing
+   * against the wall forever (never settling) or slowly crush a pushable cord. Only the tangential part
+   * then competes with static friction. Impacts still dent pushable cords through the stones' velocity.
+   */
+  wallSupport() {
+    const s = this.stones, n = s.length, m = this.inner.length, uf = this.uf, { aFx, aFy } = this;
+    const R = this.cfg.stoneRadius + this.cfg.ropeHalfWidth, reach = R + 0.25 * this.cfg.ropeHalfWidth;
+    for (let pass = 0; pass < 2; pass++) {                   // 2 passes: a stone wedged between two cords
+      for (let i = 0; i < n; i++) {
+        const px = s[i].x, py = s[i].y, r = uf.find(i);
+        for (let k = -1; k < m; k++) {
+          const cd = k < 0 ? this.rope : this.inner[k];
+          if (cd.closest(px, py, reach) >= reach) continue;
+          if (cd.contains(px, py) !== (k < 0 || this.side[i * m + k] === 1)) continue;   // wrong side: walls fix it
+          // Every segment in reach (a stone in a dent or fold of one cord touches several faces).
+          const X = cd.x, Y = cd.y, nc = cd.n;
+          for (let a = 0; a < nc; a++) {
+            const b = a + 1 === nc ? 0 : a + 1, dx = X[b] - X[a], dy = Y[b] - Y[a], l2 = dx * dx + dy * dy;
+            let t = l2 > 1e-18 ? ((px - X[a]) * dx + (py - Y[a]) * dy) / l2 : 0;
+            t = t < 0 ? 0 : t > 1 ? 1 : t;
+            const ex = px - X[a] - dx * t, ey = py - Y[a] - dy * t, d = Math.hypot(ex, ey);
+            if (d >= reach || d < 1e-9) continue;
+            const nx = ex / d, ny = ey / d, fn = aFx[r] * nx + aFy[r] * ny;   // normal: from the cord toward the stone
+            if (fn < 0) { aFx[r] -= fn * nx; aFy[r] -= fn * ny; }
+          }
+        }
+      }
+    }
   }
 
   /** Touching stones of different clusters snap: union, push apart to exactly touching, merge momentum. */
@@ -853,23 +1040,52 @@ class Physics {
       if (rope.pushOutOfCircle(st.x, st.y, R, c.ropeYield)) touched = true;
     }
     if (touched) { rope.solveLength(c.ropeIterations); rope.clampToBoard(); }
+    // Inner cords give way from whichever side the stone presses (stones on the wrong side are left to the walls).
+    const m = this.inner.length;
+    for (let k = 0; k < m; k++) {
+      const cd = this.inner[k];
+      if (cd.frozen) continue;
+      let hit = false;
+      for (let i = 0; i < s.length; i++) {
+        const st = s[i];
+        if (cd.closest(st.x, st.y, R) >= R) continue;
+        const inside = this.side[i * m + k] === 1;
+        if (cd.contains(st.x, st.y) !== inside) continue;
+        if (cd.pushOutOfCircle(st.x, st.y, R, c.ropeYield, !inside)) hit = true;
+      }
+      if (hit) { cd.solveLength(c.ropeIterations); cd.clampToBoard(); }
+    }
   }
 
   /** The cord as a wall: push each cluster (rigidly) back inside and kill most of the outward velocity. */
   resolveWalls() {
-    const c = this.cfg, s = this.stones, n = s.length, uf = this.uf, rope = this.rope;
-    const R = c.stoneRadius + c.ropeHalfWidth;
+    const c = this.cfg, m = this.inner.length, R = c.stoneRadius + c.ropeHalfWidth;
+    // Gauss-Seidel over cords: each pass handles the outer cord, then each inner cord from the stone's side.
+    const passes = m ? 4 : 3;
+    for (let iter = 0; iter < passes; iter++) {
+      let anyCord = false;
+      for (let k = -1; k < m; k++) {
+        const rope = k < 0 ? this.rope : this.inner[k];
+        if (this.resolveWall(rope, k, R)) anyCord = true;
+      }
+      if (!anyCord) break;
+    }
+  }
+
+  /** One wall pass against one cord (k = -1: the outer cord). Returns true if anything was pushed. */
+  resolveWall(rope, k, R) {
+    const c = this.cfg, s = this.stones, n = s.length, uf = this.uf, m = this.inner.length;
     const { wPen, wNx, wNy } = this;
-    for (let iter = 0; iter < 3; iter++) {
-      wPen.fill(0);
-      let any = false;
+    wPen.fill(0);
+    let any = false;
+    {
       for (let i = 0; i < n; i++) {                  // deepest penetration per cluster root
-        const p = rope.penetration(s[i].x, s[i].y, R);
+        const p = k < 0 ? rope.penetration(s[i].x, s[i].y, R) : rope.penetrationSide(s[i].x, s[i].y, R, this.side[i * m + k] === 1);
         if (p <= 0) continue;
         const r = uf.find(i);
         if (p > wPen[r]) { wPen[r] = p; wNx[r] = rope.nx; wNy[r] = rope.ny; any = true; }
       }
-      if (!any) break;
+      if (!any) return false;
       for (let i = 0; i < n; i++) {
         const r = uf.find(i), pen = wPen[r];
         if (pen <= 0) continue;
@@ -879,6 +1095,7 @@ class Physics {
         if (vin < 0) { s[i].vx -= (1 + c.wallBounce) * vin * nx; s[i].vy -= (1 + c.wallBounce) * vin * ny; }
       }
     }
+    return true;
   }
 
   /** End of turn: catch contacts created by the last wall push so they count for THIS turn, not the next. */
@@ -913,6 +1130,14 @@ const SOLO_LEVELS = {
   frozen:  { label: 'Frozen',  stones: 14, timeLimit: 90,  areaScale: 1,    frozen: true,  multiplier: 2 },
   hard:    { label: 'Hard',    stones: 16, timeLimit: 90,  areaScale: 1,    frozen: false, multiplier: 2.5 },
   squeeze: { label: 'Squeeze', stones: 16, timeLimit: 90,  areaScale: 0.8,  frozen: true,  multiplier: 3 },
+  // inner: cords inside the outer one (board units; r = inner-edge radius). island = inside off-limits,
+  // pen = inside playable; frozen inner cords are fixed walls, the others dent like the outer cord.
+  island:  { label: 'Island',  stones: 16, timeLimit: 105, areaScale: 1,    frozen: false, multiplier: 3,
+             inner: [{ kind: 'island', cx: 0.5, cy: 0.5, r: 0.11, frozen: false }] },
+  pens:    { label: 'Pens',    stones: 16, timeLimit: 105, areaScale: 1,    frozen: false, multiplier: 3.5,
+             inner: [{ kind: 'pen', cx: 0.27, cy: 0.5, r: 0.10, frozen: true }, { kind: 'pen', cx: 0.73, cy: 0.5, r: 0.10, frozen: false }] },
+  maze:    { label: 'Maze',    stones: 18, timeLimit: 105, areaScale: 0.8,  frozen: true,  multiplier: 4,
+             inner: [{ kind: 'island', cx: 0.5, cy: 0.34, r: 0.06, frozen: true }, { kind: 'pen', cx: 0.5, cy: 0.66, r: 0.09, frozen: false }] },
 };
 const LEVEL_ORDER = Object.keys(SOLO_LEVELS);
 
@@ -946,7 +1171,7 @@ function formatClock(sec) {
 }
 
 class GameState {
-  constructor(cfg) { this.cfg = cfg; this.rope = new Rope(cfg); this.reset(2, 12); }
+  constructor(cfg) { this.cfg = cfg; this.rope = new Rope(cfg); this.inner = []; this.reset(2, 12); }
 
   /**
    * opts.timeLimit (seconds) switches to SOLO TIMED mode: one player, clock runs during placing,
@@ -957,6 +1182,14 @@ class GameState {
   reset(playerCount, perPlayer, opts = {}) {
     this.rope.frozen = !!opts.frozen;                         // set before reset so the renderer's cache key changes
     this.rope.reset(opts.areaScale > 0 ? opts.areaScale : 1); // cord persists across turns, not games
+    // Inner cords (solo levels only): fresh Rope objects per game, so renderer caches key on identity too.
+    this.inner = (opts.inner || []).map((sp) => {
+      const r = new Rope(this.cfg);
+      r.kind = sp.kind === 'pen' ? 'pen' : 'island'; r.frozen = !!sp.frozen; r.minRatio = INNER_MIN_RATIO;
+      r.reset(1, sp.cx, sp.cy, sp.r);
+      return r;
+    });
+    this.cords = [this.rope, ...this.inner];                  // [outer, ...inner]
     this.drag = null;
     this.ropeSnap = null;                                     // a drag in progress must not restore an old-game cord
     this.mode = opts.timeLimit > 0 ? 'solo' : 'versus';
@@ -997,11 +1230,26 @@ class GameState {
     return soloScore(this.stones.length, this.timeLeft, lvl ? lvl.multiplier : 1);
   }
 
-  /** Returns null if OK, else 'outside' | 'overlap'. */
+  /**
+   * Geometry only: can a stone sit at (x, y)? null if so, else 'outside' (not fully inside the outer cord),
+   * 'island' (inside or touching an island) or 'cord' (touching a pen's cord). A stone must be clear of
+   * every cord by stone radius + cord half-width.
+   */
+  isPlayable(x, y) {
+    const c = this.cfg, R = c.stoneRadius + c.ropeHalfWidth - 1e-4;
+    if (!this.rope.containsCircle(x, y, R)) return 'outside';
+    for (const cd of this.inner) {
+      if (cd.kind === 'island' && cd.contains(x, y)) return 'island';
+      if (cd.closest(x, y, R) < R) return cd.kind === 'island' ? 'island' : 'cord';
+    }
+    return null;
+  }
+
+  /** Returns null if OK, else 'outside' | 'island' | 'cord' | 'overlap'. */
   validatePlacement(x, y) {
     const c = this.cfg;
-    // Fully inside the cord: center inside the loop and >= r + cord half-width from every segment.
-    if (!this.rope.containsCircle(x, y, c.stoneRadius + c.ropeHalfWidth - 1e-4)) return 'outside';
+    const geo = this.isPlayable(x, y);
+    if (geo) return geo;
     const min2 = (2 * c.stoneRadius) ** 2;
     for (const st of this.stones) {
       const dx = st.x - x, dy = st.y - y;
@@ -1017,13 +1265,15 @@ class GameState {
      (dropped off-board, invalid spot, cancelled), the cord is restored to that snapshot. */
   beginDrag() {
     this.drag = { x: 0, y: 0, onBoard: false, armed: false, pushing: false, valid: false, reason: 'off', committed: false };
-    this.ropeSnap = { x: this.rope.x.slice(), y: this.rope.y.slice() };
+    this.ropeSnap = this.cords.map((cd) => ({ cord: cd, x: cd.x.slice(), y: cd.y.slice() }));   // ALL cords
     return this.drag;
   }
   endDrag() {
     if (this.drag && !this.drag.committed && this.ropeSnap) {
-      this.rope.x.set(this.ropeSnap.x); this.rope.y.set(this.ropeSnap.y);
-      this.rope.version++;                                    // renderer rebuilds the cord path
+      for (const sn of this.ropeSnap) {
+        sn.cord.x.set(sn.x); sn.cord.y.set(sn.y);
+        sn.cord.version++;                                    // renderer rebuilds the cord path
+      }
     }
     this.drag = null;
     this.ropeSnap = null;
@@ -1040,42 +1290,90 @@ class GameState {
     else this.stepGhost(d, tx, ty, maxSteps);
     d.reason = this.validatePlacement(d.x, d.y);
     d.valid = !d.reason;
-    if (!d.armed && d.reason !== 'outside') d.armed = true;
+    if (!d.armed && (d.reason === null || d.reason === 'overlap')) {
+      d.armed = true;
+      // Which side of each inner cord the ghost is on is fixed from now on: cords are walls for it.
+      d.sides = this.inner.map((cd) => cd.kind === 'pen' && cd.contains(d.x, d.y));
+    }
     return d;
   }
 
+  /** Inside flag the ghost must keep for cord k of this.cords (0 = outer: always inside). */
+  ghostSide(d, k) { return k === 0 ? true : !!(d.sides && d.sides[k - 1]); }
+
   stepGhost(d, tx, ty, maxSteps) {
-    const c = this.cfg, rope = this.rope, R = c.stoneRadius + c.ropeHalfWidth;
-    let obstacles = null, pushes = 0;
+    const c = this.cfg, cords = this.cords, R = c.stoneRadius + c.ropeHalfWidth, multi = cords.length > 1;
+    const obstacles = new Array(cords.length).fill(null);
+    // Resting stones' side of every cord: a sub-step whose cord shoving (separation moves cords that the
+    // ghost didn't touch, with no stone obstacles) carries a cord across a resting stone is jammed.
+    const st0 = multi ? this.stones.map((st) => cords.map((cd) => cd.contains(st.x, st.y))) : null;
+    let pushes = 0;
     for (let k = 0; k < maxSteps; k++) {
       const dx = tx - d.x, dy = ty - d.y, dist = Math.hypot(dx, dy);
       if (dist < 1e-7) break;
-      // Free space: move up to the current clearance in one go; near the cord: ghostStep at a time.
-      const clear = rope.closest(d.x, d.y) - R;
+      // Free space: move up to the current clearance in one go; near a cord: ghostStep at a time.
+      let clear = Infinity;
+      for (const cd of cords) clear = Math.min(clear, cd.closest(d.x, d.y) - R);
       const s = Math.min(dist, Math.max(c.ghostStep, clear));
       let nx = d.x + dx / dist * s, ny = d.y + dy / dist * s;
-      if (rope.closest(nx, ny, R) < R) {
-        if (!obstacles || pushes % 8 === 0) obstacles = this.stonesNearRope(R + 0.08);
-        const sx = rope.x.slice(), sy = rope.y.slice();
-        rope.pushFromGhost(nx, ny, R, obstacles, R);
-        if (rope.selfIntersects()) { rope.x.set(sx); rope.y.set(sy); rope.version++; break; }  // would fold: treat as jammed
-        rope.projectCircleInside(nx, ny, R);
-        nx = rope.ox; ny = rope.oy;
-        if (!rope.frozen) { d.pushing = true; d.pushed = true; }
-        pushes++;
-        const moved = Math.hypot(nx - d.x, ny - d.y);
-        d.x = nx; d.y = ny;
-        if (moved < c.ghostStep * 0.1) break;                  // jammed: cord is taut against stones / board
-      } else { d.x = nx; d.y = ny; }
+      let touching = false;
+      for (const cd of cords) if (cd.closest(nx, ny, R) < R) { touching = true; break; }
+      if (!touching) { d.x = nx; d.y = ny; continue; }
+      if (pushes % 8 === 0) obstacles.fill(null);
+      const snap = multi ? cords.map((cd) => [cd.x.slice(), cd.y.slice(), cd.perimeter()]) : null;
+      let folded = false, pushedAny = false;
+      for (let ci = 0; ci < cords.length; ci++) {
+        const cd = cords[ci];
+        if (cd.closest(nx, ny, R) >= R) continue;
+        if (cd.frozen) continue;                              // frozen: the projection below stops the ghost
+        if (!obstacles[ci]) obstacles[ci] = this.stonesNearRope(R + 0.08, cd);
+        const sx = multi ? null : cd.x.slice(), sy = multi ? null : cd.y.slice();
+        cd.pushFromGhost(nx, ny, R, obstacles[ci], R, !this.ghostSide(d, ci));
+        if (cd.selfIntersects()) {                            // would fold: treat as jammed
+          if (!multi) { cd.x.set(sx); cd.y.set(sy); cd.version++; }
+          folded = true; break;
+        }
+        pushedAny = true; d.pushIdx = ci;
+      }
+      if (!folded && multi && pushedAny) {
+        Rope.separateAll(cords, 4 * c.ropeHalfWidth);        // pushed cord shoves (or is stopped by) the others
+        // A fold, or a cord driven further out of its length band (stretched taut, or bunched against the
+        // board edge), means jammed: undo this sub-step.
+        for (let ci = 0; ci < cords.length && !folded; ci++) {
+          const cd = cords[ci], per = cd.perimeter(), p0 = snap[ci][2];
+          if (cd.frozen) continue;
+          if ((per > cd.restPerimeter * 1.012 && per > p0 + 1e-9) || (per < cd.restPerimeter * 0.985 && per < p0 - 1e-9) || cd.selfIntersects()) folded = true;
+        }
+        for (let i = 0; i < this.stones.length && !folded; i++) {
+          const st = this.stones[i];
+          for (let ci = 0; ci < cords.length; ci++) if (cords[ci].contains(st.x, st.y) !== st0[i][ci]) { folded = true; break; }
+        }
+      }
+      if (folded) {
+        if (multi) for (let ci = 0; ci < cords.length; ci++) { cords[ci].x.set(snap[ci][0]); cords[ci].y.set(snap[ci][1]); cords[ci].version++; }
+        break;
+      }
+      // Keep the ghost on its side of every cord (a few passes: cords can wedge it).
+      for (let it = 0; it < (multi ? 4 : 1); it++) {
+        for (let ci = 0; ci < cords.length; ci++) {
+          if (ci === 0) cords[0].projectCircleInside(nx, ny, R);
+          else cords[ci].projectCircleSide(nx, ny, R, this.ghostSide(d, ci));
+          nx = cords[ci].ox; ny = cords[ci].oy;
+        }
+      }
+      if (pushedAny) { d.pushing = true; d.pushed = true; }
+      pushes++;
+      const moved = Math.hypot(nx - d.x, ny - d.y);
+      d.x = nx; d.y = ny;
+      if (moved < c.ghostStep * 0.1) break;                  // jammed: cord is taut against stones / board / cords
     }
   }
 
-  stonesNearRope(margin) {
+  stonesNearRope(margin, cord = this.rope) {
     const out = [];
-    for (const st of this.stones) if (this.rope.closest(st.x, st.y, margin) < margin) out.push(st);
+    for (const st of this.stones) if (cord.closest(st.x, st.y, margin) < margin) out.push(st);
     return out;
   }
-
   placeStone(x, y, rand = Math.random) {
     if (this.phase !== 'placing' || this.counts[this.current] <= 0) return null;
     if (this.validatePlacement(x, y)) return null;
@@ -1133,6 +1431,7 @@ class Theme {
     this.felt1 = g('--felt-1'); this.felt2 = g('--felt-2'); this.feltEdge = g('--felt-edge');
     this.speckLight = g('--felt-speck-light'); this.speckDark = g('--felt-speck-dark');
     this.rope1 = g('--rope-1'); this.rope2 = g('--rope-2'); this.rope3 = g('--rope-3'); this.ropeShadow = g('--rope-shadow');
+    this.islandFill = g('--island-fill'); this.islandHatch = g('--island-hatch');
     this.ice1 = g('--ice-1'); this.ice2 = g('--ice-2'); this.ice3 = g('--ice-3');
     this.stoneHi = g('--stone-hi'); this.stoneMid = g('--stone-mid'); this.stoneDark = g('--stone-dark');
     this.stoneRim = g('--stone-rim'); this.stoneSpec = g('--stone-spec'); this.stoneShadow = g('--stone-shadow');
@@ -1147,7 +1446,7 @@ class Renderer {
     this.canvas = canvas; this.ctx = canvas.getContext('2d');
     this.cfg = cfg; this.t = theme;
     this.S = 300; this.dpr = 1; this.bg = null;
-    this.ropeLayer = null; this.ropeKey = -1;
+    this.ropeLayer = null; this.ropeKey = null; this.ropeInner = null;
   }
 
   /** cssSize: square side in CSS pixels. Backing store is scaled by devicePixelRatio. */
@@ -1186,7 +1485,7 @@ class Renderer {
     }
 
     this.bg = c;
-    this.ropeKey = -1;                              // theme / size changed: redraw the cord too
+    this.ropeKey = null;                            // theme / size changed: redraw the cords too
   }
 
   /** Smooth closed curve through the cord nodes: quadratic Béziers between segment midpoints. */
@@ -1201,16 +1500,50 @@ class Renderer {
     g.closePath();
   }
 
-  /** Braided cord, cached in its own layer and rebuilt only when the cord moves (rope.version). */
-  buildRopeLayer(rope) {
+  /** Cache key for the cord layer: every cord's version (+ frozen flag). */
+  ropeKeyOf(rope, inner) {
+    let k = rope.version + (rope.frozen ? 'f' : 'm');
+    for (const cd of inner) k += '|' + cd.version + (cd.frozen ? 'f' : 'm');
+    return k;
+  }
+
+  /**
+   * All cords (outer + inner), cached in one layer and rebuilt only when a cord moves. Island interiors
+   * get a dark hatched fill so they read as off-limits; pen interiors stay felt.
+   */
+  buildRopeLayer(rope, inner = []) {
     if (!this.ropeLayer) this.ropeLayer = document.createElement('canvas');
     const c = this.ropeLayer;
     if (c.width !== this.canvas.width || c.height !== this.canvas.height) { c.width = this.canvas.width; c.height = this.canvas.height; }
     const g = c.getContext('2d'), S = this.S, th = this.t;
-    // Frozen cords use the icy palette so it's obvious they can't be moved.
-    const t = rope.frozen ? { ropeShadow: th.ropeShadow, rope1: th.ice1, rope2: th.ice2, rope3: th.ice3 } : th;
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, c.width, c.height);
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    for (const cd of inner) if (cd.kind === 'island') this.drawIsland(g, cd);
+    this.drawCord(g, rope);
+    for (const cd of inner) this.drawCord(g, cd);
+    this.ropeKey = this.ropeKeyOf(rope, inner); this.ropeInner = inner;
+  }
+
+  drawIsland(g, cd) {
+    const S = this.S, X = cd.x, Y = cd.y;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let i = 0; i < cd.n; i++) { x0 = Math.min(x0, X[i]); x1 = Math.max(x1, X[i]); y0 = Math.min(y0, Y[i]); y1 = Math.max(y1, Y[i]); }
+    g.save();
+    this.ropePath(g, cd, 0, 0);
+    g.fillStyle = this.t.islandFill; g.fill();
+    g.clip();
+    g.strokeStyle = this.t.islandHatch; g.lineWidth = 1.5;
+    const step = Math.max(6, S * 0.022), h = (y1 - y0) * S;
+    g.beginPath();
+    for (let x = x0 * S - h; x < x1 * S; x += step) { g.moveTo(x, y1 * S); g.lineTo(x + h, y0 * S); }
+    g.stroke();
+    g.restore();
+  }
+
+  /** One braided cord. Frozen cords use the icy palette so it's obvious they can't be moved. */
+  drawCord(g, rope) {
+    const S = this.S, th = this.t;
+    const t = rope.frozen ? { ropeShadow: th.ropeShadow, rope1: th.ice1, rope2: th.ice2, rope3: th.ice3 } : th;
     const w = 2 * this.cfg.ropeHalfWidth * S;
     g.lineJoin = 'round'; g.lineWidth = w;
     g.strokeStyle = t.ropeShadow; this.ropePath(g, rope, w * .15, w * .35); g.stroke();
@@ -1242,7 +1575,6 @@ class Renderer {
     g.strokeStyle = t.rope3; g.globalAlpha = .55; g.lineWidth = w * .16; g.stroke(a);
     g.strokeStyle = t.rope2; g.globalAlpha = .6; g.lineWidth = w * .08; g.stroke(b);
     g.globalAlpha = 1;
-    this.ropeKey = rope.version;
   }
 
   /** Warm glow on the stretch of cord the ghost is pressing against. */
@@ -1293,6 +1625,7 @@ class Renderer {
    * view: { drag: {x,y,onBoard,valid,armed,pushing}|null, showRanges, clusterOf: (i)=>bool, highlight: Set|null }
    */
   draw(stones, rope, view) {
+    const inner = view.inner || [];
     const ctx = this.ctx, S = this.S, t = this.t, cfg = this.cfg;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (this.bg) ctx.drawImage(this.bg, 0, 0); else ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -1300,12 +1633,14 @@ class Renderer {
     const r = cfg.stoneRadius * S;
     const drag = view.drag && view.drag.onBoard ? view.drag : null;
 
-    if (this.ropeKey !== rope.version || !this.ropeLayer) this.buildRopeLayer(rope);
+    if (!this.ropeLayer || this.ropeInner !== inner || this.ropeKey !== this.ropeKeyOf(rope, inner)) this.buildRopeLayer(rope, inner);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(this.ropeLayer, 0, 0);
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    if (drag && drag.armed && rope.closest(drag.x, drag.y, 0.03) < cfg.stoneRadius + cfg.ropeHalfWidth + 0.02) {
-      this.drawRopeGlow(ctx, rope, drag.x, drag.y);
+    if (drag && drag.armed) {                         // glow on whichever cord(s) the ghost presses
+      const near = cfg.stoneRadius + cfg.ropeHalfWidth + 0.02;
+      if (rope.closest(drag.x, drag.y, 0.03) < near) this.drawRopeGlow(ctx, rope, drag.x, drag.y);
+      for (const cd of inner) if (cd.closest(drag.x, drag.y, 0.03) < near) this.drawRopeGlow(ctx, cd, drag.x, drag.y);
     }
 
     // Danger zones (debug)
@@ -1438,7 +1773,8 @@ class Input {
     const placed = !!(d && d.onBoard && d.valid) && this.app.tryPlace(d.x, d.y);
     this.end();
     if (placed || !d || !d.onBoard) return;                // off-board drop: cord restored, nothing else
-    this.app.ui.toast((d.reason === 'overlap' ? 'Too close: stones can’t overlap' : 'Place it inside the cord') + (d.pushed ? ' · cord reset' : ''));
+    const msg = { overlap: 'Too close: stones can’t overlap', island: 'Islands are off-limits', cord: 'Keep it clear of the cord' }[d.reason] || 'Place it inside the cord';
+    this.app.ui.toast(msg + (d.pushed ? ' · cord reset' : ''));
   }
   onCancel(e) { if (e.pointerId === this.pid) this.end(); }
   end() {
@@ -1714,9 +2050,12 @@ class UI {
     tray.style.setProperty('--pc', color(cur));
     $('#trayDot').style.setProperty('--pc', color(cur));
     $('#trayLabel').textContent = solo ? 'Your tray' : `Player ${cur + 1}'s tray`;
-    $('#trayHint').textContent = g.rope.frozen
+    const isl = g.inner.some((cd) => cd.kind === 'island'), pen = g.inner.some((cd) => cd.kind === 'pen');
+    const innerHint = isl && pen ? ' Islands are off-limits; pens are playable inside.'
+      : isl ? ' Keep stones off the island.' : pen ? ' Pens are playable inside; their cords are walls.' : '';
+    $('#trayHint').textContent = (g.rope.frozen
       ? 'Drag a stone inside the cord. This cord is frozen and won’t move.'
-      : 'Drag a stone inside the cord. Slide it outward to stretch the cord.';
+      : 'Drag a stone inside the cord. Slide it outward to stretch the cord.') + innerHint;
     const n = g.counts[cur];
     $('#trayCount').textContent = `${n} left`;
     tray.classList.toggle('disabled', g.phase !== 'placing');
@@ -1766,6 +2105,11 @@ class UI {
       const name = mk('span', 'name', lvl.label);
       if (lvl.areaScale < 1) name.appendChild(mk('span', 'tag', `${Math.round(lvl.areaScale * 100)}% area`));
       if (lvl.frozen) name.appendChild(mk('span', 'tag frozen', 'Frozen cord'));
+      for (const sp of lvl.inner || []) {
+        const kind = sp.kind === 'pen' ? 'Pen' : 'Island', text = sp.frozen ? `Frozen ${kind.toLowerCase()}` : kind;
+        if (text.toLowerCase() === lvl.label.toLowerCase()) continue;   // "Island" level: the name says it already
+        name.appendChild(mk('span', sp.frozen ? 'tag frozen' : 'tag', text));
+      }
       const meta = mk('span', 'meta', `${lvl.stones} stones · ${formatClock(lvl.timeLimit).replace(/\.0$/, '')} · ×${lvl.multiplier}`);
       const side = mk('span', 'side');
       if (!open) side.textContent = 'Locked';
@@ -1900,7 +2244,7 @@ class App {
   tryPlace(x, y) {
     const st = this.game.placeStone(x, y);
     if (!st) return false;
-    this.physics.beginTurn(this.game.stones, this.game.rope);
+    this.physics.beginTurn(this.game.stones, this.game.rope, this.game.inner);
     this.acc = 0;
     this.ui.render();
     return true;
@@ -1911,7 +2255,7 @@ class App {
   newSolo(id) {
     if (!SOLO_LEVELS[id]) id = LEVEL_ORDER[0];
     const lvl = SOLO_LEVELS[id];
-    this.newGame(1, lvl.stones, { timeLimit: lvl.timeLimit, difficulty: id, areaScale: lvl.areaScale, frozen: lvl.frozen });
+    this.newGame(1, lvl.stones, { timeLimit: lvl.timeLimit, difficulty: id, areaScale: lvl.areaScale, frozen: lvl.frozen, inner: lvl.inner });
   }
 
   newGame(players, perPlayer, opts = {}) {
@@ -1953,6 +2297,7 @@ class App {
       drag: this.drag,
       showRanges: this.showRanges,
       highlight: this.highlight,
+      inner: g.inner,
       clusterOf: simActive ? (i) => this.physics.isInCluster(i) : null,
     });
     requestAnimationFrame((tt) => this.frame(tt));
