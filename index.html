@@ -27,7 +27,7 @@
     --accent: #2f6b4f;
     --accent-ink: #ffffff;
     --warn: #b4471f;
-    --ice-1: #bfe3f2; --ice-2: #6fa9c4; --ice-3: #ffffff; --ice-bg: #d9eef7; --ice-ink: #2c6782;
+    --ice-1: #bfe3f2; --ice-2: #6fa9c4; --ice-3: #ffffff; --ice-bg: #d9eef7; --ice-ink: #2c6782; --eyelet-1: #d9dde2; --eyelet-2: #6b727b;
     --shadow: 0 10px 30px rgba(40, 30, 10, .18);
 
     --felt-1: #4a8566;
@@ -72,7 +72,7 @@
       --accent: #7cc39c;
       --accent-ink: #0f1a14;
       --warn: #ff9f6e;
-      --ice-1: #a9d8ec; --ice-2: #4f8fae; --ice-3: #e8f7ff; --ice-bg: #1e3a47; --ice-ink: #a9d8ec;
+      --ice-1: #a9d8ec; --ice-2: #4f8fae; --ice-3: #e8f7ff; --ice-bg: #1e3a47; --ice-ink: #a9d8ec; --eyelet-1: #d9dde2; --eyelet-2: #6b727b;
       --shadow: 0 10px 30px rgba(0, 0, 0, .5);
       --felt-1: #2a5a43;
       --felt-2: #1a3d2c;
@@ -104,7 +104,7 @@
     --accent: #7cc39c;
     --accent-ink: #0f1a14;
     --warn: #ff9f6e;
-    --ice-1: #a9d8ec; --ice-2: #4f8fae; --ice-3: #e8f7ff; --ice-bg: #1e3a47; --ice-ink: #a9d8ec;
+    --ice-1: #a9d8ec; --ice-2: #4f8fae; --ice-3: #e8f7ff; --ice-bg: #1e3a47; --ice-ink: #a9d8ec; --eyelet-1: #d9dde2; --eyelet-2: #6b727b;
     --shadow: 0 10px 30px rgba(0, 0, 0, .5);
     --felt-1: #2a5a43;
     --felt-2: #1a3d2c;
@@ -497,7 +497,26 @@ class Rope {
     this.cfg = cfg; this.version = 0; this.frozen = false;
     this.kind = 'outer';     // 'outer' | 'island' (inside off-limits) | 'pen' (inside playable)
     this.minRatio = 0;       // slack limit override (0 = cfg.ropeMinRatio); inner cords use INNER_MIN_RATIO
+    this.pinned = null;      // Uint8Array: 1 = node held by an eyelet (never moves). null = no eyelets.
     this.reset();
+  }
+
+  /** Inverse mass of node i for PBD corrections: 0 when pinned by an eyelet. */
+  wOf(i) { return this.pinned && this.pinned[i] ? 0 : 1; }
+
+  /**
+   * Eyelets: pin `count` evenly spaced nodes in place, and give the cord `slack` (e.g. 1.1 = 10% longer
+   * than the starting circle) so the stretches between eyelets can be pushed and bow, while the loop
+   * as a whole stays put. Call after reset().
+   */
+  setEyelets(count, slack = 1.1) {
+    this.pinned = new Uint8Array(this.n);
+    const k = Math.max(0, Math.min(this.n, count | 0));
+    for (let e = 0; e < k; e++) this.pinned[Math.round(e * this.n / k) % this.n] = 1;
+    this.rest *= slack;
+    this.restPerimeter = this.rest * this.n;
+    this.minRatio = 0.5;     // slack loops may bunch; pins hold the overall shape
+    this.version++;
   }
 
   /**
@@ -519,6 +538,7 @@ class Rope {
     this.rest = 2 * R * Math.sin(Math.PI / n);
     this.restPerimeter = this.rest * n;
     this.ci = 0; this.ct = 0; this.qx = 0; this.qy = 0; this.nx = 0; this.ny = 0; this.ox = 0; this.oy = 0;
+    this.pinned = null;                              // eyelets are re-applied by setEyelets()
     this.version++;                                  // renderers cache on this
   }
 
@@ -626,7 +646,9 @@ class Rope {
 
   /** Move the point at param t on segment i by (dx,dy), split between its two nodes (PBD style). */
   moveSegPoint(i, t, dx, dy) {
-    const j = (i + 1) % this.n, a = 1 - t, b = t, w = a * a + b * b;
+    const j = (i + 1) % this.n, wi = this.wOf(i), wj = this.wOf(j);
+    const a = (1 - t) * wi, b = t * wj, w = a * a + b * b;
+    if (w < 1e-12) return;                           // both ends held by eyelets
     this.x[i] += dx * a / w; this.y[i] += dy * a / w;
     this.x[j] += dx * b / w; this.y[j] += dy * b / w;
   }
@@ -669,9 +691,11 @@ class Rope {
         const dx = X[j] - X[i], dy = Y[j] - Y[i], d = Math.hypot(dx, dy);
         let target;
         if (d > rest) target = rest; else if (d < minL && d > 1e-12) target = minL; else continue;
-        const corr = (d - target) / d * 0.5;
-        X[i] += dx * corr; Y[i] += dy * corr;
-        X[j] -= dx * corr; Y[j] -= dy * corr;
+        const wi = this.wOf(i), wj = this.wOf(j), ws = wi + wj;
+        if (ws === 0) continue;                      // segment between two eyelets
+        const corr = (d - target) / d;
+        X[i] += dx * corr * wi / ws; Y[i] += dy * corr * wi / ws;
+        X[j] -= dx * corr * wj / ws; Y[j] -= dy * corr * wj / ws;
       }
     }
   }
@@ -679,6 +703,7 @@ class Rope {
   clampToBoard() {
     const m = this.cfg.ropeHalfWidth, hi = 1 - m;
     for (let i = 0; i < this.n; i++) {
+      if (this.pinned && this.pinned[i]) continue;
       if (this.x[i] < m) this.x[i] = m; else if (this.x[i] > hi) this.x[i] = hi;
       if (this.y[i] < m) this.y[i] = m; else if (this.y[i] > hi) this.y[i] = hi;
     }
@@ -765,7 +790,7 @@ class Rope {
         nx = needInside ? B.nx : -B.nx; ny = needInside ? B.ny : -B.ny;
         pen = sep + d;
       }
-      if (wA > 0) { A.x[i] += nx * pen * wA; A.y[i] += ny * pen * wA; }
+      if (wA > 0 && A.wOf(i)) { A.x[i] += nx * pen * wA; A.y[i] += ny * pen * wA; }
       if (wB > 0) B.moveSegPoint(B.ci, B.ct, -nx * pen * wB, -ny * pen * wB);
       moved = true;
     }
@@ -1133,7 +1158,7 @@ const SOLO_LEVELS = {
   // inner: cords inside the outer one (board units; r = inner-edge radius). island = inside off-limits,
   // pen = inside playable; frozen inner cords are fixed walls, the others dent like the outer cord.
   island:  { label: 'Island',  stones: 16, timeLimit: 105, areaScale: 1,    frozen: false, multiplier: 3,
-             inner: [{ kind: 'island', cx: 0.5, cy: 0.5, r: 0.11, frozen: false }] },
+             inner: [{ kind: 'island', cx: 0.5, cy: 0.5, r: 0.11, frozen: false, eyelets: 6, slack: 1.1 }] },
   pens:    { label: 'Pens',    stones: 16, timeLimit: 105, areaScale: 1,    frozen: false, multiplier: 3.5,
              inner: [{ kind: 'pen', cx: 0.27, cy: 0.5, r: 0.10, frozen: true }, { kind: 'pen', cx: 0.73, cy: 0.5, r: 0.10, frozen: false }] },
   maze:    { label: 'Maze',    stones: 18, timeLimit: 105, areaScale: 0.8,  frozen: true,  multiplier: 4,
@@ -1187,6 +1212,7 @@ class GameState {
       const r = new Rope(this.cfg);
       r.kind = sp.kind === 'pen' ? 'pen' : 'island'; r.frozen = !!sp.frozen; r.minRatio = INNER_MIN_RATIO;
       r.reset(1, sp.cx, sp.cy, sp.r);
+      if (sp.eyelets > 0 && !r.frozen) r.setEyelets(sp.eyelets, sp.slack > 1 ? sp.slack : 1.1);
       return r;
     });
     this.cords = [this.rope, ...this.inner];                  // [outer, ...inner]
@@ -1342,7 +1368,8 @@ class GameState {
         for (let ci = 0; ci < cords.length && !folded; ci++) {
           const cd = cords[ci], per = cd.perimeter(), p0 = snap[ci][2];
           if (cd.frozen) continue;
-          if ((per > cd.restPerimeter * 1.012 && per > p0 + 1e-9) || (per < cd.restPerimeter * 0.985 && per < p0 - 1e-9) || cd.selfIntersects()) folded = true;
+          const lo = cd.pinned ? cd.minRatio : 0.985;            // eyeleted cords are slack by design
+          if ((per > cd.restPerimeter * 1.012 && per > p0 + 1e-9) || (per < cd.restPerimeter * lo && per < p0 - 1e-9) || cd.selfIntersects()) folded = true;
         }
         for (let i = 0; i < this.stones.length && !folded; i++) {
           const st = this.stones[i];
@@ -1433,6 +1460,7 @@ class Theme {
     this.rope1 = g('--rope-1'); this.rope2 = g('--rope-2'); this.rope3 = g('--rope-3'); this.ropeShadow = g('--rope-shadow');
     this.islandFill = g('--island-fill'); this.islandHatch = g('--island-hatch');
     this.ice1 = g('--ice-1'); this.ice2 = g('--ice-2'); this.ice3 = g('--ice-3');
+    this.eyelet1 = g('--eyelet-1'); this.eyelet2 = g('--eyelet-2');
     this.stoneHi = g('--stone-hi'); this.stoneMid = g('--stone-mid'); this.stoneDark = g('--stone-dark');
     this.stoneRim = g('--stone-rim'); this.stoneSpec = g('--stone-spec'); this.stoneShadow = g('--stone-shadow');
     this.ghostOk = g('--ghost-ok'); this.ghostBad = g('--ghost-bad');
@@ -1575,6 +1603,18 @@ class Renderer {
     g.strokeStyle = t.rope3; g.globalAlpha = .55; g.lineWidth = w * .16; g.stroke(a);
     g.strokeStyle = t.rope2; g.globalAlpha = .6; g.lineWidth = w * .08; g.stroke(b);
     g.globalAlpha = 1;
+    // Eyelets: metal rings where the cord is held in place.
+    if (rope.pinned) {
+      const er = w * .78;
+      for (let i = 0; i < n; i++) {
+        if (!rope.pinned[i]) continue;
+        const px = X[i] * S, py = Y[i] * S;
+        g.fillStyle = th.ropeShadow; g.beginPath(); g.arc(px + er * .15, py + er * .3, er, 0, Math.PI * 2); g.fill();
+        g.fillStyle = th.eyelet2; g.beginPath(); g.arc(px, py, er, 0, Math.PI * 2); g.fill();
+        g.lineWidth = er * .45; g.strokeStyle = th.eyelet1; g.beginPath(); g.arc(px, py, er * .62, 0, Math.PI * 2); g.stroke();
+        g.fillStyle = th.eyelet2; g.beginPath(); g.arc(px, py, er * .3, 0, Math.PI * 2); g.fill();
+      }
+    }
   }
 
   /** Warm glow on the stretch of cord the ghost is pressing against. */
