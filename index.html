@@ -54,6 +54,9 @@
     --range: rgba(255, 255, 255, .22);
     --range-hot: rgba(255, 198, 90, .9);
     --snap: #ffd166;
+    --halo-fill: rgba(236, 64, 52, .22);
+    --halo-edge: rgba(255, 112, 100, .85);
+    --seed-mark: rgba(255, 255, 255, .38);
 
     --p1: #e0664a;
     --p2: #2f8fa3;
@@ -87,6 +90,9 @@
       --island-hatch: rgba(255, 255, 255, .08);
       --stone-shadow: rgba(0, 0, 0, .6);
       --range: rgba(255, 255, 255, .18);
+      --halo-fill: rgba(255, 84, 72, .2);
+      --halo-edge: rgba(255, 140, 128, .8);
+      --seed-mark: rgba(255, 255, 255, .32);
       --p1: #f07a5e;
       --p2: #4fb3c7;
       --p3: #e8b84a;
@@ -119,6 +125,9 @@
     --island-hatch: rgba(255, 255, 255, .08);
     --stone-shadow: rgba(0, 0, 0, .6);
     --range: rgba(255, 255, 255, .18);
+    --halo-fill: rgba(255, 84, 72, .2);
+    --halo-edge: rgba(255, 140, 128, .8);
+    --seed-mark: rgba(255, 255, 255, .32);
     --p1: #f07a5e;
     --p2: #4fb3c7;
     --p3: #e8b84a;
@@ -265,6 +274,10 @@
   .level .side b { display: block; color: var(--ink); font-size: .9rem; }
   .tag { white-space: nowrap; font-size: .66rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--ink-soft); }
   .tag.frozen { background: var(--ice-bg); color: var(--ice-ink); }
+  .tag.bonus { background: var(--snap); color: #2a1f00; }
+  .level-group { margin-top: 6px; font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: .78rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); }
+  .level-note { margin: 0; font-size: .78rem; color: var(--ink-soft); }
+  .level .side.lock { max-width: 92px; line-height: 1.25; }
   .level.next { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .level.next .num { background: var(--accent); color: var(--accent-ink); }
   .level:disabled { cursor: default; opacity: .5; }
@@ -353,6 +366,7 @@
 <div class="overlay" id="setup" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
   <div class="card setup-card">
     <h2 id="setupTitle">New game</h2>
+    <button class="btn primary" id="continueBtn" hidden></button>
     <section class="mode-block">
       <h3>Solo · timed</h3>
       <p>Place every stone before the clock runs out. Snapped stones go back to your tray, and the clock keeps running. Clear a level to unlock the next.</p>
@@ -457,6 +471,7 @@ class Stone {
     this.vx = 0; this.vy = 0;
     this.fx = 0; this.fy = 0;      // force accumulator (scratch, per step)
     this.gripRand = gripRand;
+    this.group = -1;               // attract mode: id of the cluster it rests in across turns (-1 = alone)
     // Radius lives in Config: all stones are identical, as in the real game.
   }
   grip(cfg) { return 1 + cfg.gripJitter * this.gripRand; }
@@ -846,8 +861,12 @@ class Physics {
     this.onSnap = null;     // optional callback(relativeSpeed) — for sound
   }
 
-  /** Call right after a stone is placed. All stones start as singletons (old clusters were removed). */
-  beginTurn(stones, rope = null, inner = null) {
+  /**
+   * Call right after a stone is placed. Stones start as singletons (classic rules remove old clusters).
+   * groups (attract mode): optional per-stone labels; stones sharing a label >= 0 start the turn already
+   * snapped together (clusters stay on the board there).
+   */
+  beginTurn(stones, rope = null, inner = null, groups = null) {
     const n = stones.length;
     if (rope) this.rope = rope;
     if (inner) this.inner = inner;
@@ -863,6 +882,14 @@ class Physics {
     this.snapX = this.cords.map(c => new Float64Array(c.n)); this.snapY = this.cords.map(c => new Float64Array(c.n));
     this.stones = stones;
     this.uf = new UnionFind(n);
+    if (groups) {
+      const first = new Map();
+      for (let i = 0; i < n; i++) {
+        const gl = groups[i];
+        if (gl == null || gl < 0) continue;
+        if (first.has(gl)) this.uf.union(first.get(gl), i); else first.set(gl, i);
+      }
+    }
     this.time = 0; this.calmTime = 0; this.snapCount = 0;
     // Per-cluster scratch arrays (preallocate in C#).
     this.aFx = new Float64Array(n); this.aFy = new Float64Array(n);
@@ -1145,14 +1172,20 @@ class Physics {
 /** Phases: 'placing' → 'simulating' → ('resolving') → 'placing' | 'gameover'. */
 /**
  * Solo levels, in unlock order. areaScale shrinks the starting cord; frozen cords can't be moved.
- * timeLimit in seconds; multiplier scales the final score.
+ * timeLimit in seconds; multiplier scales the final score. startUnlocked: open on a fresh profile.
  */
 const SOLO_LEVELS = {
-  warmup:  { label: 'Warm-up', stones: 10, timeLimit: 120, areaScale: 1,    frozen: false, multiplier: 1 },
-  easy:    { label: 'Easy',    stones: 12, timeLimit: 120, areaScale: 1,    frozen: false, multiplier: 1 },
-  normal:  { label: 'Normal',  stones: 14, timeLimit: 105, areaScale: 1,    frozen: false, multiplier: 1.5 },
+  warmup:  { label: 'Warm-up', stones: 10, timeLimit: 120, areaScale: 1,    frozen: false, multiplier: 1, startUnlocked: true },
+  easy:    { label: 'Easy',    stones: 12, timeLimit: 120, areaScale: 1,    frozen: false, multiplier: 1, startUnlocked: true },
+  normal:  { label: 'Normal',  stones: 14, timeLimit: 105, areaScale: 1,    frozen: false, multiplier: 1.5, startUnlocked: true },
   tight:   { label: 'Tight',   stones: 14, timeLimit: 105, areaScale: 0.85, frozen: false, multiplier: 2 },
-  frozen:  { label: 'Frozen',  stones: 14, timeLimit: 90,  areaScale: 1,    frozen: true,  multiplier: 2 },
+  // ATTRACT bonus levels (opposite goal: make every placed stone snap). Not in the main chain: unlocked
+  // once `unlockAfter` is cleared. seeds = pre-placed stones (board units, >= 3.2 D apart: beyond maxRange,
+  // so they never snap on their own). haloD = no-drop distance from any stone, center-to-center, in diameters.
+  pull:    { label: 'Pull',    stones: 10, timeLimit: 90,  areaScale: 1,    frozen: false, multiplier: 2,
+             mode: 'attract', bonus: true, unlockAfter: 'tight', haloD: 2.0,
+             seeds: [[0.5, 0.5], [0.5, 0.23], [0.757, 0.417], [0.659, 0.718], [0.341, 0.718], [0.243, 0.417]] },
+  frozen:  { label: 'Frozen',  stones: 14, timeLimit: 90,  areaScale: 1,    frozen: true,  multiplier: 2, startUnlocked: true },
   hard:    { label: 'Hard',    stones: 16, timeLimit: 90,  areaScale: 1,    frozen: false, multiplier: 2.5 },
   squeeze: { label: 'Squeeze', stones: 16, timeLimit: 90,  areaScale: 0.8,  frozen: true,  multiplier: 3 },
   // inner: cords inside the outer one (board units; r = inner-edge radius). island = inside off-limits,
@@ -1161,10 +1194,42 @@ const SOLO_LEVELS = {
              inner: [{ kind: 'island', cx: 0.5, cy: 0.5, r: 0.11, frozen: false, eyelets: 6, slack: 1.1 }] },
   pens:    { label: 'Pens',    stones: 16, timeLimit: 105, areaScale: 1,    frozen: false, multiplier: 3.5,
              inner: [{ kind: 'pen', cx: 0.27, cy: 0.5, r: 0.10, frozen: true }, { kind: 'pen', cx: 0.73, cy: 0.5, r: 0.10, frozen: false }] },
+  longpull: { label: 'Long Pull', stones: 12, timeLimit: 90, areaScale: 1,   frozen: false, multiplier: 3.5,
+             mode: 'attract', bonus: true, unlockAfter: 'pens', haloD: 2.3,
+             seeds: [[0.632, 0.318], [0.714, 0.57], [0.5, 0.725], [0.286, 0.57], [0.368, 0.318]] },
   maze:    { label: 'Maze',    stones: 18, timeLimit: 105, areaScale: 0.8,  frozen: true,  multiplier: 4,
              inner: [{ kind: 'island', cx: 0.5, cy: 0.34, r: 0.06, frozen: true }, { kind: 'pen', cx: 0.5, cy: 0.66, r: 0.09, frozen: false }] },
 };
-const LEVEL_ORDER = Object.keys(SOLO_LEVELS);
+/** Main unlock chain (bonus levels excluded). */
+const LEVEL_ORDER = Object.keys(SOLO_LEVELS).filter((id) => !SOLO_LEVELS[id].bonus);
+/** Bonus levels, in list order. */
+const BONUS_ORDER = Object.keys(SOLO_LEVELS).filter((id) => SOLO_LEVELS[id].bonus);
+
+/**
+ * Progress is the SET of cleared level ids (storage lives in the shell). A main-chain level is open iff it is
+ * startUnlocked or the level before it in LEVEL_ORDER is cleared; a bonus level iff its unlockAfter is cleared.
+ * cleared: Set (or anything with has()). unlockAll (Tune panel testing switch) opens every level.
+ */
+function isLevelUnlocked(id, cleared, unlockAll = false) {
+  const lvl = SOLO_LEVELS[id];
+  if (!lvl) return false;
+  if (unlockAll) return true;
+  if (lvl.bonus) return cleared.has(lvl.unlockAfter);
+  const i = LEVEL_ORDER.indexOf(id);
+  return !!lvl.startUnlocked || (i > 0 && cleared.has(LEVEL_ORDER[i - 1]));
+}
+
+/** Levels (main chain first, then bonus) that clearing `id` newly opens, given the cleared set before it. */
+function levelsUnlockedBy(id, clearedBefore) {
+  const after = new Set(clearedBefore); after.add(id);
+  return [...LEVEL_ORDER, ...BONUS_ORDER].filter((l) => !isLevelUnlocked(l, clearedBefore) && isLevelUnlocked(l, after));
+}
+
+/** v2 progress ("furthest unlocked index" k) → cleared ids: every level before index k was cleared. */
+function migrateV2Progress(k) {
+  const n = Number.isFinite(k) ? Math.max(0, Math.min(Math.floor(k), LEVEL_ORDER.length - 1)) : 0;
+  return LEVEL_ORDER.slice(0, n);
+}
 
 /** The level after `id` in unlock order, or null after the last one. */
 function nextLevel(id) {
@@ -1186,6 +1251,33 @@ function soloScore(stonesOnBoard, timeLeft, multiplier = 1, scoring = SOLO_SCORI
   const subtotal = stonePts + timeBonus;
   // Difficulty multiplier applies to the whole subtotal; rounded so totals stay whole numbers.
   return { stones: stonesOnBoard, stonePts, tenths, timeBonus, subtotal, multiplier, total: Math.round(subtotal * multiplier) };
+}
+
+/**
+ * Attract scoring. Each HIT (the placed stone ends the turn in a cluster) scores
+ *   distance points = round(pointsPerD × d), d = drop distance (placed center → nearest other stone, in diameters)
+ *   chain bonus     = chainPoints × chain, chain = finalSize − 1 − largestPre (floor 0), where finalSize is the
+ *                     placed stone's final cluster size and largestPre the largest group (pre-existing cluster, or
+ *                     single stone) it absorbed. Joining one stone or one cluster = 0; pulling in a 2nd group = +1 per stone.
+ * Misses score 0 and cost missPenalty seconds. Final = (distance + chain + time bonus) × multiplier.
+ */
+const ATTRACT_SCORING = { pointsPerD: 100, chainPoints: 50, missPenalty: 5 };
+
+function attractHitScore(dropDistD, scoring = ATTRACT_SCORING) { return Math.round(scoring.pointsPerD * dropDistD); }
+
+function attractChain(finalSize, largestPre) { return Math.max(0, finalSize - 1 - largestPre); }
+
+/** stats: { hits, misses, distPts, chainPts }. Same shape conventions as soloScore (plus attract fields). */
+function attractScore(stats, timeLeft, multiplier = 1, scoring = SOLO_SCORING) {
+  const tenths = Math.max(0, Math.floor(timeLeft * 10 + 1e-9));
+  const timeBonus = Math.floor(tenths * scoring.bonusPerSecond / 10);
+  const playPts = stats.distPts + stats.chainPts;
+  const subtotal = playPts + timeBonus;
+  return {
+    attract: true, hits: stats.hits, misses: stats.misses, distPts: stats.distPts, chainPts: stats.chainPts,
+    penaltySec: stats.misses * ATTRACT_SCORING.missPenalty, tenths, timeBonus, subtotal, multiplier,
+    running: Math.round(playPts * multiplier), total: Math.round(subtotal * multiplier),
+  };
 }
 
 /** m:ss.t, e.g. 83.42 -> "1:23.4". Rounds DOWN so 0.04 s left never shows as 0.1. */
@@ -1224,6 +1316,7 @@ class GameState {
     this.timeLimit = this.mode === 'solo' ? opts.timeLimit : 0;
     this.timeLeft = this.timeLimit;
     this.outcome = null;                                      // solo: 'cleared' | 'timeout'
+    this.clockStarted = false;                                // solo: the clock waits for the first stone pick-up
     this.playerCount = playerCount;
     this.perPlayer = perPlayer;
     this.counts = new Array(playerCount).fill(perPlayer);   // stones left in each tray
@@ -1233,11 +1326,41 @@ class GameState {
     this.winner = -1;
     this.turn = 1;
     this.nextId = 1;
+    // ATTRACT (solo bonus levels, opts.attract): make stones snap. Clusters stay, halo blocks close drops.
+    this.attract = this.mode === 'solo' && !!opts.attract;
+    this.haloD = this.attract ? (opts.haloD > 0 ? opts.haloD : 2) : 0;
+    this.stats = { hits: 0, misses: 0, distPts: 0, chainPts: 0 };
+    this.lastPlaced = null;                                   // { stone, dropD } of the stone now settling
+    if (this.attract) {
+      const rand = opts.rand || Math.random;
+      for (const [x, y] of opts.seeds || []) {
+        const st = new Stone(this.nextId++, x, y, rand() * 2 - 1);
+        st.seed = true;
+        this.stones.push(st);
+      }
+    }
   }
 
-  /** Advance the solo clock. Returns 'timeout' on the frame the game is lost while placing, else null. */
+  /** Per-stone cluster labels for Physics.beginTurn (attract only: clusters persist between turns). */
+  groupLabels() { return this.attract ? this.stones.map((st) => st.group) : null; }
+
+  /** Distance from (x, y) to the nearest stone (excluding `skip`), in stone diameters. Infinity if none. */
+  nearestStoneD(x, y, skip = null) {
+    let best = Infinity;
+    for (const st of this.stones) if (st !== skip) best = Math.min(best, Math.hypot(st.x - x, st.y - y));
+    return best / this.cfg.diameter;
+  }
+
+  /** Solo: start the clock (first stone picked up this game). Returns true if it just started. */
+  startClock() {
+    if (this.mode !== 'solo' || this.clockStarted || this.phase === 'gameover') return false;
+    this.clockStarted = true;
+    return true;
+  }
+
+  /** Advance the solo clock (no-op until startClock()). Returns 'timeout' on the frame the game is lost while placing, else null. */
   tick(dt) {
-    if (this.mode !== 'solo' || this.phase === 'gameover' || this.timeLeft <= 0) return null;
+    if (this.mode !== 'solo' || !this.clockStarted || this.phase === 'gameover' || this.timeLeft <= 0) return null;
     this.timeLeft = Math.max(0, this.timeLeft - dt);
     if (this.timeLeft > 0) return null;
     if (this.phase === 'placing') { this.endSolo('timeout'); return 'timeout'; }
@@ -1253,6 +1376,7 @@ class GameState {
   /** Current solo score (final once phase is 'gameover'). */
   score() {
     const lvl = SOLO_LEVELS[this.difficulty];
+    if (this.attract) return attractScore(this.stats, this.timeLeft, lvl ? lvl.multiplier : 1);
     return soloScore(this.stones.length, this.timeLeft, lvl ? lvl.multiplier : 1);
   }
 
@@ -1271,11 +1395,16 @@ class GameState {
     return null;
   }
 
-  /** Returns null if OK, else 'outside' | 'island' | 'cord' | 'overlap'. */
+  /** Returns null if OK, else 'outside' | 'island' | 'cord' | 'overlap' | 'halo' (attract: too close to a stone). */
   validatePlacement(x, y) {
     const c = this.cfg;
     const geo = this.isPlayable(x, y);
     if (geo) return geo;
+    if (this.attract) {                                       // halo >= 1 D, so it also covers overlap
+      const h = this.haloD * c.diameter - 1e-9;
+      for (const st of this.stones) if (Math.hypot(st.x - x, st.y - y) < h) return 'halo';
+      return null;
+    }
     const min2 = (2 * c.stoneRadius) ** 2;
     for (const st of this.stones) {
       const dx = st.x - x, dy = st.y - y;
@@ -1290,6 +1419,7 @@ class GameState {
   /* The cord is snapshotted when a drag starts. If the drag ends without a stone being placed
      (dropped off-board, invalid spot, cancelled), the cord is restored to that snapshot. */
   beginDrag() {
+    if (this.phase === 'placing') this.startClock();          // solo clock starts on the first pick-up
     this.drag = { x: 0, y: 0, onBoard: false, armed: false, pushing: false, valid: false, reason: 'off', committed: false };
     this.ropeSnap = this.cords.map((cd) => ({ cord: cd, x: cd.x.slice(), y: cd.y.slice() }));   // ALL cords
     return this.drag;
@@ -1316,7 +1446,7 @@ class GameState {
     else this.stepGhost(d, tx, ty, maxSteps);
     d.reason = this.validatePlacement(d.x, d.y);
     d.valid = !d.reason;
-    if (!d.armed && (d.reason === null || d.reason === 'overlap')) {
+    if (!d.armed && (d.reason === null || d.reason === 'overlap' || d.reason === 'halo')) {
       d.armed = true;
       // Which side of each inner cord the ghost is on is fixed from now on: cords are walls for it.
       d.sides = this.inner.map((cd) => cd.kind === 'pen' && cd.contains(d.x, d.y));
@@ -1406,6 +1536,7 @@ class GameState {
     if (this.validatePlacement(x, y)) return null;
     const st = new Stone(this.nextId++, x, y, rand() * 2 - 1);
     if (this.drag) this.drag.committed = true;                // keep the pushed cord shape
+    if (this.attract) this.lastPlaced = { stone: st, dropD: this.nearestStoneD(x, y) };   // scored at drop distance
     this.stones.push(st);
     this.counts[this.current]--;
     this.phase = 'simulating';
@@ -1414,6 +1545,7 @@ class GameState {
 
   /** clusters: arrays of stones that snapped this turn. The current player takes them all. */
   resolveTurn(clusters) {
+    if (this.attract) return this.resolveAttract(clusters);
     const removed = new Set();
     for (const cl of clusters) for (const st of cl) removed.add(st);
     const before = this.stones.length;
@@ -1438,6 +1570,54 @@ class GameState {
       this.phase = 'placing';
       this.turn++;
     }
+    return result;
+  }
+
+  /**
+   * Attract turn end. clusters: every 2+ cluster after the settle (Physics.formedClusters: old ones included).
+   * HIT if the placed stone is in one: distance + chain points. MISS: −5 s, the stone stays. Nothing returns
+   * to the tray; clusters stay on the board (their labels carry them into the next turn).
+   */
+  resolveAttract(clusters) {
+    const lp = this.lastPlaced, placed = lp ? lp.stone : null, S = ATTRACT_SCORING;
+    const onBoard = new Set(this.stones);
+    const result = { player: 0, taken: 0, winner: -1, outcome: null, hit: false, dropD: lp ? lp.dropD : 0, points: 0, chain: 0, chainPts: 0, penalty: 0 };
+    const mine = placed ? clusters.find((cl) => cl.includes(placed)) : null;
+    if (mine) {
+      // Largest group the placed stone absorbed: pre-turn labels (-1 = a lone stone, size 1).
+      const sizes = new Map();
+      let largest = 0;
+      for (const st of mine) {
+        if (st === placed || !onBoard.has(st)) continue;
+        const key = st.group >= 0 ? 'g' + st.group : 's' + st.id;
+        const n = (sizes.get(key) || 0) + 1;
+        sizes.set(key, n);
+        if (n > largest) largest = n;
+      }
+      const finalSize = mine.filter((st) => onBoard.has(st)).length;
+      result.hit = true;
+      result.points = attractHitScore(lp.dropD);
+      result.chain = attractChain(finalSize, largest);
+      result.chainPts = result.chain * S.chainPoints;
+      this.stats.hits++; this.stats.distPts += result.points; this.stats.chainPts += result.chainPts;
+    } else if (placed) {
+      this.stats.misses++;
+      result.penalty = S.missPenalty;
+      this.timeLeft = Math.max(0, this.timeLeft - S.missPenalty);
+    }
+    // Relabel every cluster (old + new) so the next turn starts with them already snapped.
+    for (const cl of clusters) {
+      const members = cl.filter((st) => onBoard.has(st));
+      if (members.length < 2) continue;
+      const label = Math.min(...members.map((st) => st.id));
+      for (const st of members) st.group = label;
+    }
+    for (const st of this.stones) { st.vx = 0; st.vy = 0; }
+    this.lastPlaced = null;
+    if (this.counts[0] === 0) { this.endSolo('cleared'); result.winner = 0; }   // a last-stone miss still clears
+    else if (this.timeLeft <= 0) this.endSolo('timeout');
+    else { this.phase = 'placing'; this.turn++; }
+    result.outcome = this.outcome;
     return result;
   }
 }
@@ -1465,6 +1645,7 @@ class Theme {
     this.stoneRim = g('--stone-rim'); this.stoneSpec = g('--stone-spec'); this.stoneShadow = g('--stone-shadow');
     this.ghostOk = g('--ghost-ok'); this.ghostBad = g('--ghost-bad');
     this.range = g('--range'); this.rangeHot = g('--range-hot'); this.snap = g('--snap');
+    this.haloFill = g('--halo-fill'); this.haloEdge = g('--halo-edge'); this.seedMark = g('--seed-mark');
   }
 }
 
@@ -1683,13 +1864,22 @@ class Renderer {
       for (const cd of inner) if (cd.closest(drag.x, drag.y, 0.03) < near) this.drawRopeGlow(ctx, cd, drag.x, drag.y);
     }
 
+    // Attract: no-drop halos (radius haloD × diameter) around every stone, one union fill + soft rims.
+    if (drag && view.haloR > 0 && stones.length) {
+      const hr = view.haloR * S;
+      ctx.beginPath();
+      for (const st of stones) { ctx.moveTo(st.x * S + hr, st.y * S); ctx.arc(st.x * S, st.y * S, hr, 0, TAU); }
+      ctx.fillStyle = t.haloFill; ctx.fill();
+      ctx.setLineDash([]); ctx.lineWidth = 2.25; ctx.strokeStyle = t.haloEdge; ctx.stroke();   // solid: influence rings are dashed
+    }
+
     // Danger zones (debug)
     if (drag && view.showRanges) {
       const nominal = cfg.nominalSnapDistance;
       for (const st of stones) {
         const d = Math.hypot(st.x - drag.x, st.y - drag.y);
         const hot = d < cfg.maxRange;
-        ctx.setLineDash([]);
+        ctx.setLineDash(view.haloR > 0 ? [2, 4] : []);  // attract: dashed so it never reads as the solid halo rim
         ctx.lineWidth = hot ? 1.6 : 1;
         ctx.strokeStyle = hot ? t.rangeHot : t.range;
         ctx.beginPath(); ctx.arc(st.x * S, st.y * S, cfg.maxRange * S, 0, TAU); ctx.stroke();
@@ -1705,6 +1895,11 @@ class Renderer {
     for (let i = 0; i < stones.length; i++) {
       const st = stones[i];
       this.drawStoneBody(ctx, st.x * S, st.y * S, r);
+      if (st.seed) {                                  // attract seeds: faint center dot + inner ring
+        ctx.strokeStyle = t.seedMark; ctx.fillStyle = t.seedMark; ctx.lineWidth = 1.25;
+        ctx.beginPath(); ctx.arc(st.x * S, st.y * S, r * 0.55, 0, TAU); ctx.stroke();
+        ctx.beginPath(); ctx.arc(st.x * S, st.y * S, Math.max(1.5, r * 0.14), 0, TAU); ctx.fill();
+      }
       const inCluster = (view.highlight && view.highlight.has(st)) || (view.clusterOf && view.clusterOf(i));
       if (inCluster) {
         ctx.strokeStyle = t.snap; ctx.lineWidth = 2.5;
@@ -1813,7 +2008,7 @@ class Input {
     const placed = !!(d && d.onBoard && d.valid) && this.app.tryPlace(d.x, d.y);
     this.end();
     if (placed || !d || !d.onBoard) return;                // off-board drop: cord restored, nothing else
-    const msg = { overlap: 'Too close: stones can’t overlap', island: 'Islands are off-limits', cord: 'Keep it clear of the cord' }[d.reason] || 'Place it inside the cord';
+    const msg = { halo: 'Too close: drop outside the halo', overlap: 'Too close: stones can’t overlap', island: 'Islands are off-limits', cord: 'Keep it clear of the cord' }[d.reason] || 'Place it inside the cord';
     this.app.ui.toast(msg + (d.pushed ? ' · cord reset' : ''));
   }
   onCancel(e) { if (e.pointerId === this.pid) this.end(); }
@@ -1852,19 +2047,46 @@ const TUNABLES = [
     help: 'How much a sliding stone dents the cord. 0 = rigid wall, 1 = cord yields fully.' },
 ];
 
-/** Best solo time-left per difficulty, kept in this browser only. Storage may be unavailable. */
-/** How far the player has unlocked (index into LEVEL_ORDER). Browser-only; defaults to the first level. */
+/**
+ * Cleared solo levels (a set of ids), kept in this browser only. Storage may be unavailable: the in-memory
+ * set still works for the session. One-time migration from the v2 "furthest unlocked index".
+ */
 const Progress = {
-  key: 'stonesAttract.v2.unlocked',
+  key: 'stonesAttract.v3.cleared',
+  v2Key: 'stonesAttract.v2.unlocked',
+  cache: null,
   get() {
-    try { const v = parseInt(localStorage.getItem(this.key), 10); return Number.isFinite(v) ? Math.max(0, Math.min(v, LEVEL_ORDER.length - 1)) : 0; }
-    catch (e) { return 0; }
+    if (this.cache) return this.cache;
+    let ids = [];
+    try {
+      const raw = localStorage.getItem(this.key);
+      if (raw == null) {
+        const old = localStorage.getItem(this.v2Key);
+        if (old != null) ids = migrateV2Progress(parseInt(old, 10));
+        localStorage.setItem(this.key, JSON.stringify(ids));
+      } else {
+        const v = JSON.parse(raw);
+        if (Array.isArray(v)) ids = v;
+      }
+    } catch (e) { /* unavailable or corrupt: start fresh */ }
+    this.cache = new Set(ids.filter((id) => typeof id === 'string' && SOLO_LEVELS[id]));
+    return this.cache;
   },
-  unlock(index) {
-    if (index <= this.get()) return false;
-    try { localStorage.setItem(this.key, String(index)); } catch (e) { /* not saved */ }
+  /** Mark a level cleared. Returns true the first time. */
+  clear(id) {
+    const set = this.get();
+    if (set.has(id)) return false;
+    set.add(id);
+    try { localStorage.setItem(this.key, JSON.stringify([...set])); } catch (e) { /* not saved */ }
     return true;
   },
+};
+
+/** Last solo level started, for the start sheet's Continue button. Browser-only; may be unavailable. */
+const LastLevel = {
+  key: 'stonesAttract.v3.lastLevel',
+  get() { try { const v = localStorage.getItem(this.key); return v && SOLO_LEVELS[v] ? v : null; } catch (e) { return null; } },
+  set(id) { try { localStorage.setItem(this.key, id); } catch (e) { /* not saved */ } },
 };
 
 const Best = {
@@ -1926,12 +2148,20 @@ class UI {
     $('#unlockAll').addEventListener('change', (e) => { app.unlockAll = e.target.checked; this.renderLevels(); });
     // New-game sheet
     const setup = $('#setup');
-    const openSetup = () => {
-      app.sfx.unlock(); setPanel(false); this.hideWinner(); this.renderLevels(); setup.classList.add('show');
-      const target = $('#levelList .level.next') || $('#levelList .level:not(:disabled)');
+    const openSetup = (gesture = true) => {
+      if (gesture !== false) app.sfx.unlock();              // audio needs a user gesture (not the page-load open)
+      setPanel(false); this.hideWinner(); this.renderLevels(); setup.classList.add('show');
+      const cont = $('#continueBtn');
+      const target = (!cont.hidden && cont) || $('#levelList .level.next') || $('#levelList .level:not(:disabled)');
       if (target) target.focus();
     };
+    this.openSetup = openSetup;                              // also the start screen on page load
     const closeSetup = () => setup.classList.remove('show');
+    $('#continueBtn').addEventListener('click', () => {
+      const id = LastLevel.get();
+      if (!id || !app.isUnlocked(id)) return;
+      closeSetup(); app.newSolo(id);
+    });
     $('#gameBtn').addEventListener('click', openSetup);
     $('#changeMode').addEventListener('click', openSetup);
     $('#setupClose').addEventListener('click', closeSetup);
@@ -2057,9 +2287,12 @@ class UI {
     const g = this.app.game, cur = g.current, solo = g.mode === 'solo';
     const color = (p) => `var(--p${p + 1})`;
     $('#turnDot').style.setProperty('--pc', color(cur));
-    $('#turnTitle').textContent = solo ? `Level ${LEVEL_ORDER.indexOf(g.difficulty) + 1} · ${SOLO_LEVELS[g.difficulty].label}` : `Player ${cur + 1}`;
+    const lvlNow = solo ? SOLO_LEVELS[g.difficulty] : null;
+    $('#turnTitle').textContent = !solo ? `Player ${cur + 1}`
+      : lvlNow.bonus ? `Bonus · ${lvlNow.label}` : `Level ${LEVEL_ORDER.indexOf(g.difficulty) + 1} · ${lvlNow.label}`;
     $('#turnSub').textContent = {
-      placing: solo ? 'Place every stone before time runs out' : 'Drag a stone from your tray',
+      placing: solo && !g.clockStarted ? 'Clock starts when you pick up a stone'
+        : g.attract ? 'Make every stone snap before time runs out' : solo ? 'Place every stone before time runs out' : 'Drag a stone from your tray',
       simulating: 'Magnets settling…',
       resolving: 'Snap!',
       gameover: 'Game over',
@@ -2071,7 +2304,8 @@ class UI {
       this.renderClock();
       const sc = g.score();
       // During play: stone points with the level multiplier (time bonus is added at the end).
-      $('#clockScore').textContent = (g.phase === 'gameover' ? sc.total : Math.round(sc.stonePts * sc.multiplier)).toLocaleString();
+      // Attract: hit + chain points with the multiplier.
+      $('#clockScore').textContent = (g.phase === 'gameover' ? sc.total : sc.attract ? sc.running : Math.round(sc.stonePts * sc.multiplier)).toLocaleString();
     }
 
     const scores = $('#scores');
@@ -2093,7 +2327,7 @@ class UI {
     const isl = g.inner.some((cd) => cd.kind === 'island'), pen = g.inner.some((cd) => cd.kind === 'pen');
     const innerHint = isl && pen ? ' Islands are off-limits; pens are playable inside.'
       : isl ? ' Keep stones off the island.' : pen ? ' Pens are playable inside; their cords are walls.' : '';
-    $('#trayHint').textContent = (g.rope.frozen
+    $('#trayHint').textContent = g.attract ? 'Drop outside the halo so the magnets pull it in.' : (g.rope.frozen
       ? 'Drag a stone inside the cord. This cord is frozen and won’t move.'
       : 'Drag a stone inside the cord. Slide it outward to stretch the cord.') + innerHint;
     const n = g.counts[cur];
@@ -2127,22 +2361,33 @@ class UI {
     $('#clock').setAttribute('aria-label', `${Math.ceil(g.timeLeft)} seconds left`);
   }
 
-  /** Level list in the New sheet: locked levels are disabled; the furthest unlocked one is highlighted. */
+  /** Level list in the New sheet: locked levels are disabled; the first open, uncleared main level is highlighted. Bonus group last. */
   renderLevels() {
     const app = this.app, sc = SOLO_SCORING;
     $('#scoreRule').textContent = `Score: ${sc.pointsPerStone} per stone inside the cord, plus ${sc.bonusPerSecond} per second left on the clock, times the level multiplier.`;
     const host = $('#levelList');
     host.replaceChildren();
-    const furthest = app.unlockAll ? -1 : Progress.get();
+    const cleared = Progress.get();
+    // Continue: the last solo level started, if it still exists and is open.
+    const last = LastLevel.get(), cont = $('#continueBtn');
+    cont.hidden = !(last && app.isUnlocked(last));
+    if (!cont.hidden) {
+      const L = SOLO_LEVELS[last];
+      cont.textContent = L.bonus ? `Continue · Bonus ${L.label}` : `Continue · Level ${LEVEL_ORDER.indexOf(last) + 1} ${L.label}`;
+    }
+    // "Next": first main-chain level that's open but not cleared (fallback: the last open one).
+    const openMain = LEVEL_ORDER.filter((id) => app.isUnlocked(id));
+    const nextId = openMain.find((id) => !cleared.has(id)) || openMain[openMain.length - 1];
     const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-    LEVEL_ORDER.forEach((id, i) => {
+    const lockSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+    const button = (id, numText, isNext, ariaName) => {
       const lvl = SOLO_LEVELS[id], open = app.isUnlocked(id), best = Best.get(id);
-      const b = mk('button', 'level' + (i === furthest ? ' next' : ''));
+      const b = mk('button', 'level' + (isNext ? ' next' : ''));
       b.type = 'button'; b.dataset.level = id; b.disabled = !open;
       const num = mk('span', 'num');
-      if (open) num.textContent = String(i + 1);
-      else num.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+      if (open) num.textContent = numText; else num.innerHTML = lockSvg;
       const name = mk('span', 'name', lvl.label);
+      if (lvl.bonus) name.appendChild(mk('span', 'tag bonus', 'Bonus'));
       if (lvl.areaScale < 1) name.appendChild(mk('span', 'tag', `${Math.round(lvl.areaScale * 100)}% area`));
       if (lvl.frozen) name.appendChild(mk('span', 'tag frozen', 'Frozen cord'));
       for (const sp of lvl.inner || []) {
@@ -2150,15 +2395,25 @@ class UI {
         if (text.toLowerCase() === lvl.label.toLowerCase()) continue;   // "Island" level: the name says it already
         name.appendChild(mk('span', sp.frozen ? 'tag frozen' : 'tag', text));
       }
-      const meta = mk('span', 'meta', `${lvl.stones} stones · ${formatClock(lvl.timeLimit).replace(/\.0$/, '')} · ×${lvl.multiplier}`);
-      const side = mk('span', 'side');
-      if (!open) side.textContent = 'Locked';
+      const seeds = lvl.seeds ? ` · ${lvl.seeds.length} seeds` : '';
+      const meta = mk('span', 'meta', `${lvl.stones} stones${seeds} · ${formatClock(lvl.timeLimit).replace(/\.0$/, '')} · ×${lvl.multiplier}`);
+      const req = lvl.bonus ? lvl.unlockAfter : LEVEL_ORDER[LEVEL_ORDER.indexOf(id) - 1];
+      const lockText = req ? `Clear ${SOLO_LEVELS[req].label} to unlock` : 'Locked';
+      const side = mk('span', 'side' + (!open ? ' lock' : ''));
+      if (!open) side.textContent = lockText;
       else if (best != null) { side.appendChild(mk('b', null, best.toLocaleString())); side.appendChild(document.createTextNode('best')); }
       else side.textContent = 'New';
       b.append(num, name, meta, side);
-      b.setAttribute('aria-label', `Level ${i + 1}, ${lvl.label}: ${meta.textContent}${open ? (best != null ? `, best ${best}` : '') : ', locked'}`);
-      host.appendChild(b);
-    });
+      b.setAttribute('aria-label', `${ariaName}: ${meta.textContent}${open ? (best != null ? `, best ${best}` : '') : ', ' + lockText.toLowerCase()}`);
+      return b;
+    };
+    LEVEL_ORDER.forEach((id, i) => host.appendChild(button(id, String(i + 1), id === nextId, `Level ${i + 1}, ${SOLO_LEVELS[id].label}`)));
+    if (BONUS_ORDER.length) {
+      host.appendChild(mk('div', 'level-group', 'Bonus'));
+      const as = ATTRACT_SCORING;
+      host.appendChild(mk('p', 'level-note', `Opposite goal: make every stone snap. Drop outside the halo; a snap scores ${as.pointsPerD} per diameter of drop distance, +${as.chainPoints} per extra stone pulled in. A miss costs ${as.missPenalty} s.`));
+      BONUS_ORDER.forEach((id, i) => host.appendChild(button(id, 'B' + (i + 1), false, `Bonus ${SOLO_LEVELS[id].label}`)));
+    }
     $('#bestLine').textContent = app.unlockAll ? 'All levels unlocked for testing (Tune panel).' : '';
   }
 
@@ -2185,10 +2440,21 @@ class UI {
       $('#winnerMsg').textContent = `${left} stone${left === 1 ? '' : 's'} still in your tray.`;
     }
     const n = (v) => v.toLocaleString();
-    const rows = [
+    if (sc.attract && outcome === 'cleared') {
+      const placed = sc.hits + sc.misses;
+      $('#winnerMsg').textContent = `All ${placed} stones placed: ${sc.hits} snapped, ${sc.misses} missed.`;
+    }
+    const timeRow = [`Time bonus (${formatClock((sc.tenths + 0.5) / 10)} × ${SOLO_SCORING.bonusPerSecond}/s)`, n(sc.timeBonus)];
+    const multRow = [`${SOLO_LEVELS[this.app.game.difficulty].label} multiplier (${n(sc.subtotal)} × ${sc.multiplier})`, `×${sc.multiplier}`];
+    const rows = sc.attract ? [
+      [`Hits × ${sc.hits} (distance points)`, n(sc.distPts)],
+      ['Chain bonus', n(sc.chainPts)],
+      [`Misses × ${sc.misses}`, sc.misses ? `−${sc.penaltySec} s` : '0 s'],
+      timeRow, multRow,
+      ['Total', n(sc.total)],
+    ] : [
       [`Stones in the cord (${sc.stones} × ${SOLO_SCORING.pointsPerStone})`, n(sc.stonePts)],
-      [`Time bonus (${formatClock((sc.tenths + 0.5) / 10)} × ${SOLO_SCORING.bonusPerSecond}/s)`, n(sc.timeBonus)],
-      [`${SOLO_LEVELS[this.app.game.difficulty].label} multiplier (${n(sc.subtotal)} × ${sc.multiplier})`, `×${sc.multiplier}`],
+      timeRow, multRow,
       ['Total', n(sc.total)],
     ];
     const box = $('#breakdown');
@@ -2207,16 +2473,17 @@ class UI {
       ? (prevBest == null ? 'First best score on this level.' : `New best! Previous: ${n(prevBest)}.`)
       : (prevBest == null ? 'No best score on this level yet.' : `Best on this level: ${n(prevBest)}.`);
     box.appendChild(note);
-    if (unlockedNow) {
+    if (unlockedNow && unlockedNow.length) {             // every level this clear opened (main and bonus)
       const u = document.createElement('span');
       u.className = 'note';
-      u.textContent = `Unlocked: Level ${LEVEL_ORDER.indexOf(unlockedNow) + 1} · ${SOLO_LEVELS[unlockedNow].label}`;
+      u.textContent = 'Unlocked: ' + unlockedNow.map((id) => SOLO_LEVELS[id].bonus
+        ? `Bonus · ${SOLO_LEVELS[id].label}` : `Level ${LEVEL_ORDER.indexOf(id) + 1} · ${SOLO_LEVELS[id].label}`).join(', ');
       box.appendChild(u);
     }
     box.hidden = false;
     // "Next level" leads when the next level is open and this one was cleared.
     const nxt = nextLevel(this.app.game.difficulty);
-    const showNext = outcome === 'cleared' && !!nxt && this.app.isUnlocked(nxt);
+    const showNext = outcome === 'cleared' && !!nxt && !SOLO_LEVELS[this.app.game.difficulty].bonus && this.app.isUnlocked(nxt);
     $('#nextLevel').hidden = !showNext;
     if (showNext) $('#nextLevel').textContent = `Next: ${SOLO_LEVELS[nxt].label}`;
     $('#playAgain').classList.toggle('primary', !showNext);
@@ -2267,10 +2534,15 @@ class App {
     new MutationObserver(onTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
     this.ui.render();
+    this.ui.openSetup(false);                        // the level list is the start screen
     requestAnimationFrame((t) => this.frame(t));
   }
 
-  beginDrag() { this.game.beginDrag(); this.dragTarget = null; this.drag = null; }
+  beginDrag() {
+    const wasStarted = this.game.clockStarted;
+    this.game.beginDrag(); this.dragTarget = null; this.drag = null;
+    if (!wasStarted && this.game.clockStarted) this.ui.render();   // subtitle drops the "clock starts" hint
+  }
   endDrag() { this.game.endDrag(); this.dragTarget = null; this.drag = null; }
   /** Advance the ghost toward the pointer (sub-stepped; may take several frames on a fast flick). */
   stepDrag() {
@@ -2284,18 +2556,20 @@ class App {
   tryPlace(x, y) {
     const st = this.game.placeStone(x, y);
     if (!st) return false;
-    this.physics.beginTurn(this.game.stones, this.game.rope, this.game.inner);
+    this.physics.beginTurn(this.game.stones, this.game.rope, this.game.inner, this.game.groupLabels());
     this.acc = 0;
     this.ui.render();
     return true;
   }
 
-  isUnlocked(id) { return this.unlockAll || LEVEL_ORDER.indexOf(id) <= Progress.get(); }
+  isUnlocked(id) { return isLevelUnlocked(id, Progress.get(), this.unlockAll); }
 
   newSolo(id) {
     if (!SOLO_LEVELS[id]) id = LEVEL_ORDER[0];
     const lvl = SOLO_LEVELS[id];
-    this.newGame(1, lvl.stones, { timeLimit: lvl.timeLimit, difficulty: id, areaScale: lvl.areaScale, frozen: lvl.frozen, inner: lvl.inner });
+    LastLevel.set(id);
+    this.newGame(1, lvl.stones, { timeLimit: lvl.timeLimit, difficulty: id, areaScale: lvl.areaScale, frozen: lvl.frozen, inner: lvl.inner,
+      attract: lvl.mode === 'attract', seeds: lvl.seeds, haloD: lvl.haloD });
   }
 
   newGame(players, perPlayer, opts = {}) {
@@ -2338,7 +2612,8 @@ class App {
       showRanges: this.showRanges,
       highlight: this.highlight,
       inner: g.inner,
-      clusterOf: simActive ? (i) => this.physics.isInCluster(i) : null,
+      haloR: g.attract ? g.haloD * this.cfg.diameter : 0,
+      clusterOf: simActive ? (i) => this.physics.isInCluster(i) : g.attract ? (i) => g.stones[i].group >= 0 : null,
     });
     requestAnimationFrame((tt) => this.frame(tt));
   }
@@ -2346,9 +2621,12 @@ class App {
   endSimulation() {
     this.physics.finalize();
     const clusters = this.physics.formedClusters();
-    if (clusters.length === 0) { this.finishTurn(clusters); return; }
+    // Attract: old clusters are in the list too; only pause on a hit (the placed stone's cluster).
+    const lp = this.game.attract && this.game.lastPlaced;
+    const shown = lp ? clusters.filter((cl) => cl.includes(lp.stone)) : clusters;
+    if (shown.length === 0) { this.finishTurn(clusters); return; }
     this.game.phase = 'resolving';
-    this.highlight = new Set(clusters.flat());
+    this.highlight = new Set(shown.flat());
     this.ui.render();
     const gen = this.gen;
     this.resolveTimer = setTimeout(() => { if (gen === this.gen) this.finishTurn(clusters); }, 700);   // let the player see what snapped
@@ -2358,7 +2636,10 @@ class App {
     const res = this.game.resolveTurn(clusters);
     this.highlight = null;
     const s = res.taken === 1 ? '' : 's';
-    if (res.taken > 0) this.ui.toast(this.game.mode === 'solo'
+    if (this.game.attract) {
+      if (res.hit) this.ui.toast(`Snap! +${res.points}` + (res.chainPts ? ` · chain +${res.chainPts}` : ''), 'snap');
+      else this.ui.toast(`Miss −${res.penalty} s`);
+    } else if (res.taken > 0) this.ui.toast(this.game.mode === 'solo'
       ? `Snap! ${res.taken} stone${s} back to your tray`
       : `Snap! Player ${res.player + 1} takes ${res.taken} stone${s}`, 'snap');
     else this.ui.toast('Clean placement');
@@ -2372,10 +2653,12 @@ class App {
     const prev = Best.get(g.difficulty);
     const isBest = sc.total > 0 && (prev == null || sc.total > prev);   // a zero never becomes a best
     if (isBest) Best.set(g.difficulty, sc.total);
-    // Clearing a level unlocks the next one (saved in this browser).
+    // Clearing a level adds it to the cleared set (saved in this browser); note whatever that opens.
     let unlockedNow = null;
-    const nxt = nextLevel(g.difficulty);
-    if (g.outcome === 'cleared' && nxt && Progress.unlock(LEVEL_ORDER.indexOf(nxt))) unlockedNow = nxt;
+    if (g.outcome === 'cleared') {
+      const before = new Set(Progress.get());
+      if (Progress.clear(g.difficulty)) unlockedNow = levelsUnlockedBy(g.difficulty, before);
+    }
     this.ui.render();                                 // clock row switches to the final total
     this.ui.showSoloResult(g.outcome, sc, isBest, prev, g.counts[0], unlockedNow);
   }
