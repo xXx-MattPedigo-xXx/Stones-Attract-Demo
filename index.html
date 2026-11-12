@@ -255,6 +255,12 @@
   .clock-time { justify-self: end; font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 1.35rem; font-variant-numeric: tabular-nums; }
   .clock-bar { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
   .clock-bar span { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; }
+  .clock-score { justify-self: end; font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 1rem; font-variant-numeric: tabular-nums; }
+  .clock-bar + .clock-label { margin-top: 4px; }
+  .breakdown { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; text-align: left; margin: 10px 0 18px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: .9rem; }
+  .breakdown span:nth-child(even) { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .breakdown .total { font-family: "Space Grotesk", sans-serif; font-size: 1.15rem; font-weight: 700; padding-top: 6px; border-top: 1px solid var(--line); }
+  .breakdown .note { grid-column: 1 / -1; color: var(--ink-soft); font-size: .8rem; text-align: left; font-weight: 500; }
   .clock.low .clock-bar span { background: var(--warn); }
   .clock.low .clock-time { color: var(--warn); }
 
@@ -287,6 +293,8 @@
     <span class="clock-label" id="clockLabel">Time left</span>
     <span class="clock-time" id="clockTime" role="timer" aria-live="off">1:30.0</span>
     <span class="clock-bar"><span id="clockFill"></span></span>
+    <span class="clock-label">Score</span>
+    <span class="clock-score" id="clockScore">0</span>
   </div>
 
   <main class="board-wrap" id="boardWrap">
@@ -322,6 +330,7 @@
     <section class="mode-block">
       <h3>Solo · timed</h3>
       <p>Place all 12 stones before the clock runs out. Snapped stones go back to your tray, and the clock keeps running.</p>
+      <p id="scoreRule"></p>
       <div class="diff-row">
         <button class="btn diff" id="soloEasy" data-diff="easy">Easy<small>2:00</small></button>
         <button class="btn diff primary" id="soloNormal" data-diff="normal">Normal<small>1:30</small></button>
@@ -345,6 +354,7 @@
   <div class="card">
     <h2 id="winnerTitle"><span class="dot" id="winnerDot"></span><span id="winnerText">Player 1 wins!</span></h2>
     <p id="winnerMsg">All stones placed. Nicely done.</p>
+    <div class="breakdown" id="breakdown" hidden></div>
     <div class="btn-col">
       <button class="btn primary" id="playAgain">Play again</button>
       <button class="btn" id="changeMode">Change mode</button>
@@ -874,6 +884,20 @@ const SOLO_LEVELS = {
   hard:   { label: 'Hard',   timeLimit: 60,  stones: 12 },
 };
 
+/** Solo scoring: points per stone inside the cord at game end + bonus per tenth of a second left. */
+const SOLO_SCORING = {
+  pointsPerStone: 100,
+  bonusPerSecond: 10,          // awarded per whole tenth: 23.47 s left -> 234 pts
+};
+
+/** Score breakdown for a solo game. Stones on the board are always inside the cord. */
+function soloScore(stonesOnBoard, timeLeft, scoring = SOLO_SCORING) {
+  const stonePts = stonesOnBoard * scoring.pointsPerStone;
+  const tenths = Math.max(0, Math.floor(timeLeft * 10 + 1e-9));
+  const timeBonus = Math.floor(tenths * scoring.bonusPerSecond / 10);
+  return { stones: stonesOnBoard, stonePts, tenths, timeBonus, total: stonePts + timeBonus };
+}
+
 /** m:ss.t, e.g. 83.42 -> "1:23.4". Rounds DOWN so 0.04 s left never shows as 0.1. */
 function formatClock(sec) {
   const t = Math.max(0, Math.floor(sec * 10)) / 10;
@@ -925,6 +949,9 @@ class GameState {
     this.phase = 'gameover';
     this.winner = outcome === 'cleared' ? 0 : -1;
   }
+
+  /** Current solo score (final once phase is 'gameover'). */
+  score() { return soloScore(this.stones.length, this.timeLeft); }
 
   /** Returns null if OK, else 'outside' | 'overlap'. */
   validatePlacement(x, y) {
@@ -1403,7 +1430,7 @@ const TUNABLES = [
 
 /** Best solo time-left per difficulty, kept in this browser only. Storage may be unavailable. */
 const Best = {
-  key: (diff) => `stonesAttract.best.${diff}`,
+  key: (diff) => `stonesAttract.bestScore.${diff}`,
   get(diff) {
     try { const v = parseFloat(localStorage.getItem(this.key(diff))); return Number.isFinite(v) ? v : null; }
     catch (e) { return null; }
@@ -1591,7 +1618,11 @@ class UI {
 
     $('#clock').hidden = !solo;
     this.lastClockText = null;
-    if (solo) this.renderClock();
+    if (solo) {
+      this.renderClock();
+      const sc = g.score();
+      $('#clockScore').textContent = (g.phase === 'gameover' ? sc.total : sc.stonePts).toLocaleString();
+    }
 
     const scores = $('#scores');
     scores.innerHTML = '';
@@ -1641,31 +1672,57 @@ class UI {
   }
 
   renderBest() {
+    const sc = SOLO_SCORING;
+    $('#scoreRule').textContent = `Score: ${sc.pointsPerStone} per stone inside the cord, plus ${sc.bonusPerSecond} per second left on the clock.`;
     const parts = Object.keys(SOLO_LEVELS).map(k => {
       const b = Best.get(k);
-      return b == null ? null : `${SOLO_LEVELS[k].label} ${formatClock(b)}`;
+      return b == null ? null : `${SOLO_LEVELS[k].label} ${b.toLocaleString()}`;
     }).filter(Boolean);
-    $('#bestLine').textContent = parts.length ? `Best time left: ${parts.join(' · ')}` : 'No solo wins yet.';
+    $('#bestLine').textContent = parts.length ? `Best scores: ${parts.join(' · ')}` : 'No solo scores yet.';
   }
 
   showWinner(player) {
     $('#winnerDot').style.setProperty('--pc', `var(--p${player + 1})`);
     $('#winnerText').textContent = `Player ${player + 1} wins!`;
     $('#winnerMsg').textContent = 'All stones placed. Nicely done.';
+    $('#breakdown').hidden = true;
     $('#winner').classList.add('show');
     $('#playAgain').focus();
   }
 
-  showSoloResult(outcome, timeLeft, isBest, prevBest, left) {
+  /** sc: soloScore() result. Builds the breakdown with DOM nodes (no innerHTML from data). */
+  showSoloResult(outcome, sc, isBest, prevBest, left) {
     $('#winnerDot').style.setProperty('--pc', outcome === 'cleared' ? 'var(--p1)' : 'var(--warn)');
     if (outcome === 'cleared') {
       $('#winnerText').textContent = 'Cleared!';
-      $('#winnerMsg').textContent = `All stones placed with ${formatClock(timeLeft)} to spare.` +
-        (isBest ? (prevBest == null ? ' First win on this level.' : ` New best (was ${formatClock(prevBest)}).`) : ` Best: ${formatClock(prevBest)}.`);
+      $('#winnerMsg').textContent = `All ${sc.stones} stones placed with ${formatClock((sc.tenths + 0.5) / 10)} to spare.`;
     } else {
       $('#winnerText').textContent = 'Time’s up';
       $('#winnerMsg').textContent = `${left} stone${left === 1 ? '' : 's'} still in your tray.`;
     }
+    const n = (v) => v.toLocaleString();
+    const rows = [
+      [`Stones in the cord (${sc.stones} × ${SOLO_SCORING.pointsPerStone})`, n(sc.stonePts)],
+      [`Time bonus (${formatClock((sc.tenths + 0.5) / 10)} × ${SOLO_SCORING.bonusPerSecond}/s)`, n(sc.timeBonus)],
+      ['Total', n(sc.total)],
+    ];
+    const box = $('#breakdown');
+    box.replaceChildren();
+    rows.forEach(([label, val], i) => {
+      for (const text of [label, val]) {
+        const s = document.createElement('span');
+        s.textContent = text;
+        if (i === rows.length - 1) s.className = 'total';
+        box.appendChild(s);
+      }
+    });
+    const note = document.createElement('span');
+    note.className = 'note';
+    note.textContent = isBest
+      ? (prevBest == null ? 'First best score on this level.' : `New best! Previous: ${n(prevBest)}.`)
+      : (prevBest == null ? 'No best score on this level yet.' : `Best on this level: ${n(prevBest)}.`);
+    box.appendChild(note);
+    box.hidden = false;
     $('#winner').classList.add('show');
     $('#playAgain').focus();
   }
@@ -1808,11 +1865,12 @@ class App {
   }
 
   showSoloEnd() {
-    const g = this.game;
-    let isBest = false;
+    const g = this.game, sc = g.score();
     const prev = Best.get(g.difficulty);
-    if (g.outcome === 'cleared' && (prev == null || g.timeLeft > prev)) { Best.set(g.difficulty, g.timeLeft); isBest = true; }
-    this.ui.showSoloResult(g.outcome, g.timeLeft, isBest, prev, g.counts[0]);
+    const isBest = sc.total > 0 && (prev == null || sc.total > prev);   // a zero never becomes a best
+    if (isBest) Best.set(g.difficulty, sc.total);
+    this.ui.render();                                 // clock row switches to the final total
+    this.ui.showSoloResult(g.outcome, sc, isBest, prev, g.counts[0]);
   }
 }
 
