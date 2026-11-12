@@ -1,0 +1,1625 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Stones Attract — playable browser demo of a magnetic stones game.">
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  :root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  body{margin:0;font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+  img{max-width:100%}[hidden]{display:none!important}
+</style>
+<title>Stones Attract</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* =====================================================================
+     THEME TOKENS — canvas reads these via getComputedStyle (see Theme class)
+     ===================================================================== */
+  :root {
+    color-scheme: light;
+    --bg: #ece6da;
+    --surface: #f8f4ed;
+    --surface-2: #e4dccd;
+    --ink: #24211c;
+    --ink-soft: #6c655a;
+    --line: #d3c9b7;
+    --accent: #2f6b4f;
+    --accent-ink: #ffffff;
+    --shadow: 0 10px 30px rgba(40, 30, 10, .18);
+
+    --felt-1: #4a8566;
+    --felt-2: #31634a;
+    --felt-edge: #1e4231;
+    --felt-speck-light: rgba(255, 255, 255, .07);
+    --felt-speck-dark: rgba(0, 0, 0, .10);
+    --rope-1: #d2b077;
+    --rope-2: #9c7744;
+    --rope-3: #f2dfb3;
+    --rope-shadow: rgba(0, 0, 0, .35);
+
+    --stone-hi: #cdd2d9;
+    --stone-mid: #50555d;
+    --stone-dark: #17191c;
+    --stone-rim: #060607;
+    --stone-spec: rgba(255, 255, 255, .95);
+    --stone-shadow: rgba(0, 0, 0, .45);
+
+    --ghost-ok: #effaf2;
+    --ghost-bad: #ff5a4f;
+    --range: rgba(255, 255, 255, .22);
+    --range-hot: rgba(255, 198, 90, .9);
+    --snap: #ffd166;
+
+    --p1: #e0664a;
+    --p2: #2f8fa3;
+    --p3: #d19a1c;
+    --p4: #8a63c9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #121412;
+      --surface: #1c1f1d;
+      --surface-2: #272b28;
+      --ink: #ebe7df;
+      --ink-soft: #a39e94;
+      --line: #343935;
+      --accent: #7cc39c;
+      --accent-ink: #0f1a14;
+      --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+      --felt-1: #2a5a43;
+      --felt-2: #1a3d2c;
+      --felt-edge: #0d2118;
+      --felt-speck-light: rgba(255, 255, 255, .05);
+      --felt-speck-dark: rgba(0, 0, 0, .16);
+      --rope-1: #b9975f;
+      --rope-2: #7a5b32;
+      --rope-3: #dcc28f;
+      --rope-shadow: rgba(0, 0, 0, .55);
+      --stone-shadow: rgba(0, 0, 0, .6);
+      --range: rgba(255, 255, 255, .18);
+      --p1: #f07a5e;
+      --p2: #4fb3c7;
+      --p3: #e8b84a;
+      --p4: #a585e0;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #121412;
+    --surface: #1c1f1d;
+    --surface-2: #272b28;
+    --ink: #ebe7df;
+    --ink-soft: #a39e94;
+    --line: #343935;
+    --accent: #7cc39c;
+    --accent-ink: #0f1a14;
+    --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+    --felt-1: #2a5a43;
+    --felt-2: #1a3d2c;
+    --felt-edge: #0d2118;
+    --felt-speck-light: rgba(255, 255, 255, .05);
+    --felt-speck-dark: rgba(0, 0, 0, .16);
+    --rope-1: #b9975f;
+    --rope-2: #7a5b32;
+    --rope-3: #dcc28f;
+    --rope-shadow: rgba(0, 0, 0, .55);
+    --stone-shadow: rgba(0, 0, 0, .6);
+    --range: rgba(255, 255, 255, .18);
+    --p1: #f07a5e;
+    --p2: #4fb3c7;
+    --p3: #e8b84a;
+    --p4: #a585e0;
+  }
+
+  /* =====================================================================
+     LAYOUT
+     ===================================================================== */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.4 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: max(10px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-bottom, 0px));
+    overflow-x: hidden;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1, h2, h3 { font-family: "Space Grotesk", "Inter", system-ui, sans-serif; margin: 0; letter-spacing: -.01em; }
+  button, select, input { font: inherit; color: inherit; }
+
+  .app { height: 100%; max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .turn h1 { font-size: 1.3rem; display: flex; align-items: center; gap: 8px; }
+  .turn p { margin: 2px 0 0; color: var(--ink-soft); font-size: .85rem; }
+  .brand { display: block; font-family: "Space Grotesk", system-ui, sans-serif; font-weight: 700; font-size: .7rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 2px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--pc, var(--ink-soft)); flex: none; box-shadow: 0 0 0 2px var(--surface); }
+  .actions { display: flex; gap: 6px; }
+  .icon-btn {
+    min-width: 40px; height: 40px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--surface); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    font-weight: 600; font-size: .85rem;
+  }
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  .scores { display: flex; gap: 6px; flex-wrap: wrap; }
+  .score {
+    flex: 1 1 0; min-width: 70px; display: flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--line); font-size: .85rem; font-weight: 500;
+  }
+  .score b { margin-left: auto; font-family: "Space Grotesk", sans-serif; font-size: 1.05rem; }
+  .score.active { border-color: var(--pc); box-shadow: inset 0 0 0 1px var(--pc); }
+
+  .board-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  #board { display: block; touch-action: none; border-radius: 22px; box-shadow: var(--shadow); }
+
+  .toast {
+    position: absolute; top: 10px; left: 50%; transform: translate(-50%, -6px); opacity: 0; pointer-events: none;
+    padding: 8px 14px; border-radius: 999px; background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+    font-weight: 600; font-size: .9rem; box-shadow: var(--shadow); transition: opacity .2s, transform .2s; white-space: nowrap; max-width: 92%;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.snap { background: var(--snap); color: #2a1f00; border-color: transparent; }
+
+  .tray {
+    touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab;
+    background: var(--surface); border: 1px solid var(--line); border-top: 4px solid var(--pc, var(--line));
+    border-radius: 16px; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .tray.disabled { opacity: .55; cursor: default; }
+  .tray.dragging { cursor: grabbing; }
+  .tray-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: .9rem; }
+  .tray-head .count { margin-left: auto; color: var(--ink-soft); font-weight: 500; }
+  .tray-stones { display: flex; align-items: center; min-height: 34px; flex-wrap: nowrap; overflow: hidden; padding-left: 6px; }
+  .mini-stone {
+    width: 30px; height: 30px; border-radius: 50%; margin-left: -6px; flex: none;
+    background: radial-gradient(circle at 34% 30%, var(--stone-hi) 0, var(--stone-mid) 20%, var(--stone-dark) 70%, var(--stone-rim) 100%);
+    box-shadow: 1px 3px 4px var(--stone-shadow);
+  }
+  .tray.dragging .mini-stone:last-child { opacity: .25; }
+  .tray-more { margin-left: 8px; color: var(--ink-soft); font-size: .85rem; }
+  .tray-hint { color: var(--ink-soft); font-size: .8rem; }
+
+  /* ---------- Tuning panel (bottom sheet) ---------- */
+  .panel {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; max-height: 78vh; overflow-y: auto;
+    background: var(--surface); border-top: 1px solid var(--line); border-radius: 20px 20px 0 0; box-shadow: 0 -10px 40px rgba(0,0,0,.25);
+    padding: 14px max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    transform: translateY(105%); transition: transform .25s ease;
+  }
+  .panel.open { transform: translateY(0); }
+  .panel-inner { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; position: sticky; top: -14px; background: var(--surface); padding: 4px 0 6px; z-index: 1; }
+  .panel-head h2 { font-size: 1.15rem; }
+  .panel h3 { font-size: .95rem; margin-top: 6px; }
+  .slider { display: flex; flex-direction: column; gap: 2px; }
+  .slider-top { display: flex; justify-content: space-between; gap: 8px; font-size: .88rem; font-weight: 600; }
+  .slider output { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-weight: 500; font-size: .82rem; color: var(--accent); text-align: right; }
+  .slider input[type=range] { width: 100%; accent-color: var(--accent); margin: 4px 0 0; height: 28px; }
+  .slider-help { font-size: .75rem; color: var(--ink-soft); }
+  .derived {
+    font-size: .8rem; background: var(--surface-2); border-radius: 12px; padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 10px;
+  }
+  .derived span:nth-child(even) { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; text-align: right; }
+  .derived .note { grid-column: 1 / -1; color: var(--ink-soft); margin-top: 4px; }
+  .toggle { display: flex; align-items: center; gap: 8px; font-size: .88rem; }
+  .toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    flex: 1 1 auto; height: 42px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2);
+    font-weight: 600; cursor: pointer;
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  #copyFallback { width: 100%; min-height: 220px; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); padding: 8px; }
+  .setup { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+  .setup label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--ink-soft); flex: 1 1 90px; }
+  .setup select { height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); padding: 0 8px; color: var(--ink); }
+  .legend { font-size: .75rem; color: var(--ink-soft); }
+
+  /* ---------- Winner overlay ---------- */
+  .overlay { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.45); padding: 16px; }
+  .overlay.show { display: flex; }
+  .card { background: var(--surface); border-radius: 20px; padding: 24px; text-align: center; box-shadow: var(--shadow); max-width: 320px; width: 100%; }
+  .card h2 { font-size: 1.6rem; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .card p { color: var(--ink-soft); margin: 8px 0 18px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .toast, .panel { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="topbar">
+    <div class="turn">
+      <span class="brand">Stones Attract</span>
+      <h1><span class="dot" id="turnDot"></span><span id="turnTitle">Player 1</span></h1>
+      <p id="turnSub">Drag a stone from your tray</p>
+    </div>
+    <div class="actions">
+      <button class="icon-btn" id="muteBtn" aria-label="Mute sound" aria-pressed="false"></button>
+      <button class="icon-btn" id="tuneBtn" aria-controls="panel" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+        Tune
+      </button>
+    </div>
+  </header>
+
+  <div class="scores" id="scores"></div>
+
+  <main class="board-wrap" id="boardWrap">
+    <canvas id="board" aria-label="Stones Attract board"></canvas>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </main>
+
+  <section class="tray" id="tray" aria-label="Your stone tray">
+    <div class="tray-head"><span class="dot" id="trayDot"></span><span id="trayLabel">Player 1's tray</span><span class="count" id="trayCount"></span></div>
+    <div class="tray-stones" id="trayStones"></div>
+    <div class="tray-hint" id="trayHint">Drag a stone inside the cord. Slide it outward to stretch the cord.</div>
+  </section>
+</div>
+
+<aside class="panel" id="panel" aria-label="Magnet tuning">
+  <div class="panel-inner">
+    <div class="panel-head"><h2>Magnet tuning</h2><button class="btn primary" id="panelClose" style="flex:none">Done</button></div>
+    <div id="sliders"></div>
+    <div class="derived" id="derived"></div>
+    <label class="toggle"><input type="checkbox" id="debugToggle" checked> Show influence circles while dragging</label>
+    <div class="legend">Solid circle = max range (no force beyond). Dashed circle = nominal break-loose distance √(k/Fs) for an average stone.</div>
+    <div class="btn-row">
+      <button class="btn" id="resetCfg">Reset to defaults</button>
+      <button class="btn primary" id="copyCfg">Copy config (C#)</button>
+    </div>
+    <textarea id="copyFallback" hidden readonly aria-label="Config to copy"></textarea>
+    <h3>Game</h3>
+    <div class="setup">
+      <label>Players <select id="selPlayers"></select></label>
+      <label>Stones each <select id="selStones"></select></label>
+      <button class="btn" id="newGame" style="flex:1 1 120px">New game</button>
+    </div>
+  </div>
+</aside>
+
+<div class="overlay" id="winner" role="dialog" aria-modal="true" aria-labelledby="winnerTitle">
+  <div class="card">
+    <h2 id="winnerTitle"><span class="dot" id="winnerDot"></span><span id="winnerText">Player 1 wins!</span></h2>
+    <p>All stones placed. Nicely done.</p>
+    <button class="btn primary" id="playAgain" style="width:100%">Play again</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ============================================================================
+   STONES ATTRACT — PROTOTYPE
+   Structure (each maps 1:1 to a C# class for the MAUI + SkiaSharp port):
+     CORE (pure, no DOM — also loaded by the Node sim script):
+       1. Config        – all tunables (→ MagnetConfig / a mutable GameConfig)
+       2. Stone         – position, velocity, per-stone grip
+       3. UnionFind     – cluster bookkeeping for snapped stones
+       3b. Rope         – deformable, inextensible cord (PBD); inside tests
+       4. Physics       – fixed-step magnet simulation (Step(dt))
+       5. GameState     – game rules, turns, trays, win check
+     SHELL (browser-only):
+       6. Theme         – reads CSS tokens for the canvas
+       7. Renderer      – canvas drawing (→ SKCanvas)
+       8. Sfx           – WebAudio click
+       9. Input         – pointer drag from tray to board
+      10. UI            – DOM panels, sliders, toasts
+      11. App           – wiring + main loop
+   Units: the board is a 1.0 x 1.0 square; the cord starts as a circle centered at (0.5, 0.5).
+   Time in seconds. Every stone has mass 1, so "force" == acceleration.
+   ========================================================================== */
+
+// #region CORE
+/* ------------------------------------------------------------------ 1. Config */
+const DEFAULT_CONFIG = Object.freeze({
+  strength: 0.036,       // k: F = k / max(d, dMin)^2   [board^3 / s^2]
+  maxRange: 0.20,        // center-to-center cutoff; zero force beyond  [board]
+  staticFriction: 2.0,   // force needed to break a resting stone loose (per stone)  [board/s^2]
+  kineticRatio: 0.5,     // sliding friction = staticFriction * kineticRatio
+  damping: 1.5,          // linear velocity damping  [1/s]
+  stoneRadius: 0.032,    // [board]  (~3.2% of board)
+  gripJitter: 0.45,      // each stone's static friction = Fs * (1 ± jitter): makes the middle band "risky"
+  minDistFactor: 1.0,    // dMin = stoneRadius * factor (force clamp, avoids singularity)
+  ringRadius: 0.46,      // initial playable radius: the cord's INNER edge starts here  [board]
+  ropeNodes: 72,         // cord = closed loop of this many nodes; segment rest length = initial spacing
+  ropeHalfWidth: 0.012,  // half the cord thickness: a stone touches at r + this from the centerline  [board]
+  ropeYield: 0.5,        // fraction of a stone's overlap the cord gives way per substep (rest shoves the stone back)
+  ropeIterations: 16,    // length-constraint sweeps per cord solve
+  ropeMinRatio: 0.5,     // a segment may go slack down to this × rest length (stops bunching)
+  ghostStep: 0.006,      // max ghost travel per sub-step while it pushes the cord (anti-tunnelling)  [board]
+  fixedDt: 1 / 120,      // physics substep  [s]
+  restSpeed: 0.01,       // below this a stone may stick (static friction check)  [board/s]
+  settleSpeed: 0.004,    // "everything still" speed  [board/s]
+  settleTime: 0.4,       // must stay still this long to end the turn  [s]
+  maxSpeed: 4.0,         // safety clamp  [board/s]
+  maxSimTime: 10,        // hard stop for a turn's simulation  [s]
+  wallBounce: 0.25,      // restitution against the cord
+});
+
+class Config {
+  constructor() { this.reset(); }
+  reset() { Object.assign(this, DEFAULT_CONFIG); }
+  get diameter() { return this.stoneRadius * 2; }
+  get minDist() { return this.stoneRadius * this.minDistFactor; }
+  /** Distance where an average-grip stone breaks loose: k/d² = Fs  →  d = √(k/Fs). */
+  get nominalSnapDistance() { return Math.sqrt(this.strength / this.staticFriction); }
+  /** Pair always snaps when closer than this (even the grippiest stone breaks loose). */
+  get guaranteedSnapDistance() { return Math.min(this.maxRange, Math.sqrt(this.strength / (this.staticFriction * (1 + this.gripJitter)))); }
+  /** Pair never snaps beyond this (even the weakest-grip stone holds, or out of range). */
+  get guaranteedSafeDistance() { return Math.min(this.maxRange, Math.sqrt(this.strength / (this.staticFriction * Math.max(0.01, 1 - this.gripJitter)))); }
+}
+
+/* ------------------------------------------------------------------- 2. Stone */
+class Stone {
+  /** gripRand in [-1, 1]: this stone's fixed static-friction variation (felt fibres, magnet tolerances). */
+  constructor(id, x, y, gripRand) {
+    this.id = id;
+    this.x = x; this.y = y;
+    this.vx = 0; this.vy = 0;
+    this.fx = 0; this.fy = 0;      // force accumulator (scratch, per step)
+    this.gripRand = gripRand;
+    // Radius lives in Config: all stones are identical, as in the real game.
+  }
+  grip(cfg) { return 1 + cfg.gripJitter * this.gripRand; }
+}
+
+/* --------------------------------------------------------------- 3. UnionFind */
+class UnionFind {
+  constructor(n) {
+    this.parent = new Int32Array(n);
+    this.size = new Int32Array(n);
+    for (let i = 0; i < n; i++) { this.parent[i] = i; this.size[i] = 1; }
+  }
+  find(i) {
+    while (this.parent[i] !== i) { this.parent[i] = this.parent[this.parent[i]]; i = this.parent[i]; }
+    return i;
+  }
+  union(a, b) {
+    a = this.find(a); b = this.find(b);
+    if (a === b) return a;
+    if (this.size[a] < this.size[b]) { const t = a; a = b; b = t; }
+    this.parent[b] = a;
+    this.size[a] += this.size[b];
+    return a;
+  }
+  sizeOf(i) { return this.size[this.find(i)]; }
+}
+
+/* ------------------------------------------------------------------ 3b. Rope */
+/**
+ * The cord: a closed loop of N nodes describing its CENTERLINE. Inextensible (segment length
+ * <= rest) but may go slack (>= ropeMinRatio * rest). Quasi-static position-based dynamics:
+ * nodes carry no velocity (heavy felt friction) and only move when something pushes them.
+ * A circle of radius r touches the cord when its center is within r + ropeHalfWidth of a segment.
+ * Methods that return a point/normal write it to scratch fields (ox/oy, nx/ny, qx/qy) — out params in C#.
+ */
+class Rope {
+  constructor(cfg) { this.cfg = cfg; this.version = 0; this.reset(); }
+
+  reset() {
+    const c = this.cfg, n = Math.max(8, c.ropeNodes | 0), R = c.ringRadius + c.ropeHalfWidth;
+    this.n = n;
+    this.x = new Float64Array(n); this.y = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const a = i / n * Math.PI * 2;
+      this.x[i] = 0.5 + Math.cos(a) * R; this.y[i] = 0.5 + Math.sin(a) * R;
+    }
+    this.rest = 2 * R * Math.sin(Math.PI / n);
+    this.restPerimeter = this.rest * n;
+    this.ci = 0; this.ct = 0; this.qx = 0; this.qy = 0; this.nx = 0; this.ny = 0; this.ox = 0; this.oy = 0;
+    this.version++;                                  // renderers cache on this
+  }
+
+  perimeter() {
+    let p = 0;
+    for (let i = 0, n = this.n; i < n; i++) { const j = (i + 1) % n; p += Math.hypot(this.x[j] - this.x[i], this.y[j] - this.y[i]); }
+    return p;
+  }
+
+  /** +1 / -1 depending on winding; used to orient segment normals inward. */
+  orientation() {
+    let a = 0;
+    for (let i = 0, n = this.n; i < n; i++) { const j = (i + 1) % n; a += this.x[i] * this.y[j] - this.x[j] * this.y[i]; }
+    return a >= 0 ? 1 : -1;
+  }
+
+  /** Point-in-polygon (crossing number) on the centerline polygon. */
+  contains(px, py) {
+    const X = this.x, Y = this.y, n = this.n;
+    let inside = false;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const yi = Y[i], yj = Y[j];
+      if ((yi > py) !== (yj > py) && px < (X[j] - X[i]) * (py - yi) / (yj - yi) + X[i]) inside = !inside;
+    }
+    return inside;
+  }
+
+  /**
+   * Distance to the nearest segment; fills ci (segment), ct (param), qx/qy (closest point).
+   * Segments whose bounding box is farther than maxD are skipped (cheap reject) → may return Infinity.
+   */
+  closest(px, py, maxD = Infinity) {
+    const X = this.x, Y = this.y, n = this.n;
+    let best = Infinity;
+    for (let i = 0; i < n; i++) {
+      const j = i + 1 === n ? 0 : i + 1;
+      const ax = X[i], ay = Y[i], bx = X[j], by = Y[j];
+      if (px < (ax < bx ? ax : bx) - maxD || px > (ax > bx ? ax : bx) + maxD ||
+          py < (ay < by ? ay : by) - maxD || py > (ay > by ? ay : by) + maxD) continue;
+      const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+      let t = l2 > 1e-18 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const qx = ax + dx * t, qy = ay + dy * t, ex = px - qx, ey = py - qy, d2 = ex * ex + ey * ey;
+      if (d2 < best) { best = d2; this.ci = i; this.ct = t; this.qx = qx; this.qy = qy; }
+    }
+    return Math.sqrt(best);
+  }
+
+  /** Inward unit normal of segment i → nx/ny. */
+  inwardNormal(i, sgn) {
+    const j = (i + 1) % this.n, dx = this.x[j] - this.x[i], dy = this.y[j] - this.y[i], l = Math.hypot(dx, dy);
+    if (l < 1e-12) { this.nx = 0.5 - this.x[i]; this.ny = 0.5 - this.y[i]; const m = Math.hypot(this.nx, this.ny) || 1; this.nx /= m; this.ny /= m; return; }
+    this.nx = -dy / l * sgn; this.ny = dx / l * sgn;
+  }
+
+  /** True if a circle whose center must stay R from the centerline fits entirely inside. */
+  containsCircle(px, py, R) { return this.contains(px, py) && this.closest(px, py, R) >= R; }
+
+  /**
+   * How far a circle (contact radius R) must move to sit fully inside; direction → nx/ny.
+   * 0 when clear. Handles a center that is (somehow) outside by pushing across the nearest segment.
+   */
+  penetration(px, py, R) {
+    if (this.contains(px, py)) {
+      const d = this.closest(px, py, R);
+      if (d >= R) return 0;
+      if (d > 1e-9) { this.nx = (px - this.qx) / d; this.ny = (py - this.qy) / d; }
+      else this.inwardNormal(this.ci, this.orientation());
+      return R - d;
+    }
+    const d = this.closest(px, py);
+    this.inwardNormal(this.ci, this.orientation());
+    return R + d;
+  }
+
+  /** Move the point at param t on segment i by (dx,dy), split between its two nodes (PBD style). */
+  moveSegPoint(i, t, dx, dy) {
+    const j = (i + 1) % this.n, a = 1 - t, b = t, w = a * a + b * b;
+    this.x[i] += dx * a / w; this.y[i] += dy * a / w;
+    this.x[j] += dx * b / w; this.y[j] += dy * b / w;
+  }
+
+  /** Push cord segments out of a circle (center inside the loop) by `amount` × overlap. Returns true if moved. */
+  pushOutOfCircle(cx, cy, R, amount) {
+    const X = this.x, Y = this.y, n = this.n;
+    let moved = false, sgn = 0;
+    for (let i = 0; i < n; i++) {
+      const j = i + 1 === n ? 0 : i + 1;
+      const ax = X[i], ay = Y[i], bx = X[j], by = Y[j];
+      if (cx < Math.min(ax, bx) - R || cx > Math.max(ax, bx) + R || cy < Math.min(ay, by) - R || cy > Math.max(ay, by) + R) continue;
+      const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+      let t = l2 > 1e-18 ? ((cx - ax) * dx + (cy - ay) * dy) / l2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const qx = ax + dx * t, qy = ay + dy * t, d = Math.hypot(qx - cx, qy - cy);
+      if (d >= R) continue;
+      let ux, uy;
+      if (d > 1e-9) { ux = (qx - cx) / d; uy = (qy - cy) / d; }
+      else { if (!sgn) sgn = this.orientation(); this.inwardNormal(i, sgn); ux = -this.nx; uy = -this.ny; }
+      const push = (R - d) * amount;
+      this.moveSegPoint(i, t, ux * push, uy * push);
+      moved = true;
+    }
+    if (moved) this.version++;
+    return moved;
+  }
+
+  /** Gauss-Seidel length constraints, alternating sweep direction so tension travels both ways round. */
+  solveLength(iters) {
+    const X = this.x, Y = this.y, n = this.n, rest = this.rest, minL = rest * this.cfg.ropeMinRatio;
+    for (let it = 0; it < iters; it++) {
+      const fwd = (it & 1) === 0;
+      for (let k = 0; k < n; k++) {
+        const i = fwd ? k : n - 1 - k, j = i + 1 === n ? 0 : i + 1;
+        const dx = X[j] - X[i], dy = Y[j] - Y[i], d = Math.hypot(dx, dy);
+        let target;
+        if (d > rest) target = rest; else if (d < minL && d > 1e-12) target = minL; else continue;
+        const corr = (d - target) / d * 0.5;
+        X[i] += dx * corr; Y[i] += dy * corr;
+        X[j] -= dx * corr; Y[j] -= dy * corr;
+      }
+    }
+  }
+
+  clampToBoard() {
+    const m = this.cfg.ropeHalfWidth, hi = 1 - m;
+    for (let i = 0; i < this.n; i++) {
+      if (this.x[i] < m) this.x[i] = m; else if (this.x[i] > hi) this.x[i] = hi;
+      if (this.y[i] < m) this.y[i] = m; else if (this.y[i] > hi) this.y[i] = hi;
+    }
+  }
+
+  /** True if any two non-adjacent segments cross (bbox-prefiltered; ~N²/2 cheap rejects). Breaks contains() if so. */
+  selfIntersects() {
+    const X = this.x, Y = this.y, n = this.n;
+    for (let i = 0; i < n; i++) {
+      const i2 = i + 1 === n ? 0 : i + 1, ax = X[i], ay = Y[i], bx = X[i2], by = Y[i2];
+      const x0 = Math.min(ax, bx), x1 = Math.max(ax, bx), y0 = Math.min(ay, by), y1 = Math.max(ay, by);
+      for (let j = i + 2; j < n; j++) {
+        if (i === 0 && j === n - 1) continue;
+        const j2 = j + 1 === n ? 0 : j + 1, cx = X[j], cy = Y[j], dx = X[j2], dy = Y[j2];
+        if ((cx < x0 && dx < x0) || (cx > x1 && dx > x1) || (cy < y0 && dy < y0) || (cy > y1 && dy > y1)) continue;
+        const d1 = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx), d2 = (dx - cx) * (by - cy) - (dy - cy) * (bx - cx);
+        const d3 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax), d4 = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax);
+        if ((d1 > 0) !== (d2 > 0) && (d3 > 0) !== (d4 > 0)) return true;
+      }
+    }
+    return false;
+  }
+
+  /** Move a circle (contact radius R) until it sits inside the loop → ox/oy. */
+  projectCircleInside(cx, cy, R, iters = 6) {
+    for (let k = 0; k < iters; k++) {
+      const p = this.penetration(cx, cy, R);
+      if (p <= 1e-12) break;
+      cx += this.nx * (p + 1e-7); cy += this.ny * (p + 1e-7);
+    }
+    this.ox = cx; this.oy = cy;
+  }
+
+  /**
+   * The dragged ghost (center inside, contact radius R) shoves the cord outward. Resting stones are
+   * obstacles the cord can't pass through. The final length-only passes make the cord win: if it is
+   * jammed, the caller's projectCircleInside() then pushes the ghost back instead of stretching the cord.
+   */
+  pushFromGhost(gx, gy, R, obstacles, Rs) {
+    const iters = this.cfg.ropeIterations;
+    for (let it = 0; it < iters; it++) {
+      this.pushOutOfCircle(gx, gy, R, 1);
+      for (let k = 0; k < obstacles.length; k++) this.pushOutOfCircle(obstacles[k].x, obstacles[k].y, Rs, 1);
+      this.solveLength(2);
+      this.clampToBoard();
+    }
+    this.solveLength(iters);
+    this.clampToBoard();
+    this.version++;
+  }
+}
+
+/* ----------------------------------------------------------------- 4. Physics */
+/**
+ * Fixed-step simulation. Snapped stones form a rigid cluster (union-find root):
+ * the cluster sums its members' forces, has mass = member count, and every
+ * member shares one velocity (pure translation; rotation is ignored).
+ */
+class Physics {
+  constructor(cfg, rope = null) {
+    this.cfg = cfg;
+    this.rope = rope || new Rope(cfg);   // normally GameState.rope (shared, persists across turns)
+    this.stones = [];
+    this.uf = new UnionFind(0);
+    this.time = 0;          // simulated seconds this turn
+    this.calmTime = 0;      // seconds everything has been below settleSpeed
+    this.snapCount = 0;     // snap events this turn
+    this.onSnap = null;     // optional callback(relativeSpeed) — for sound
+  }
+
+  /** Call right after a stone is placed. All stones start as singletons (old clusters were removed). */
+  beginTurn(stones, rope = null) {
+    const n = stones.length;
+    if (rope) this.rope = rope;
+    this.stones = stones;
+    this.uf = new UnionFind(n);
+    this.time = 0; this.calmTime = 0; this.snapCount = 0;
+    // Per-cluster scratch arrays (preallocate in C#).
+    this.aFx = new Float64Array(n); this.aFy = new Float64Array(n);
+    this.aM = new Float64Array(n); this.aGrip = new Float64Array(n);
+    this.aVx = new Float64Array(n); this.aVy = new Float64Array(n);
+    this.wPen = new Float64Array(n); this.wNx = new Float64Array(n); this.wNy = new Float64Array(n);
+    // A ghost push (or a cancelled one) can leave the cord pressing into resting stones: settle that first.
+    this.dentRope(); this.resolveWalls();
+  }
+
+  isSettled() { return this.calmTime >= this.cfg.settleTime || this.time >= this.cfg.maxSimTime; }
+
+  /** One fixed substep: forces → cluster integration (semi-implicit Euler) → collisions → walls. */
+  step(dt) {
+    const c = this.cfg, s = this.stones, n = s.length, uf = this.uf;
+    const dMin = c.minDist, range2 = c.maxRange * c.maxRange;
+
+    // 1) Pairwise magnet forces between stones of DIFFERENT clusters.
+    for (let i = 0; i < n; i++) { s[i].fx = 0; s[i].fy = 0; }
+    for (let i = 0; i < n; i++) {
+      const a = s[i], ri = uf.find(i);
+      for (let j = i + 1; j < n; j++) {
+        if (uf.find(j) === ri) continue;
+        const b = s[j];
+        const dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy;
+        if (d2 >= range2) continue;                 // hard cutoff
+        const d = Math.sqrt(d2);
+        if (d < 1e-9) continue;
+        const de = Math.max(d, dMin);
+        const f = c.strength / (de * de);           // inverse-square: gentle far, violent near
+        const fx = f * dx / d, fy = f * dy / d;
+        a.fx += fx; a.fy += fy;
+        b.fx -= fx; b.fy -= fy;
+      }
+    }
+
+    // 2) Aggregate per cluster root.
+    const { aFx, aFy, aM, aGrip, aVx, aVy } = this;
+    aFx.fill(0); aFy.fill(0); aM.fill(0); aGrip.fill(0);
+    for (let i = 0; i < n; i++) {
+      const r = uf.find(i);
+      aFx[r] += s[i].fx; aFy[r] += s[i].fy;
+      aM[r] += 1;
+      aGrip[r] += s[i].grip(c);
+      aVx[r] = s[i].vx; aVy[r] = s[i].vy;           // all members share velocity
+    }
+
+    // 3) Integrate each cluster with static + kinetic friction and damping.
+    const damp = 1 / (1 + c.damping * dt);
+    for (let r = 0; r < n; r++) {
+      if (aM[r] === 0) continue;                     // not a root
+      const m = aM[r];
+      let vx = aVx[r], vy = aVy[r];
+      const speed = Math.hypot(vx, vy);
+      const F = Math.hypot(aFx[r], aFy[r]);
+      const staticLimit = c.staticFriction * aGrip[r];   // total holding force of the cluster
+      if (speed < c.restSpeed && F <= staticLimit) {
+        vx = 0; vy = 0;                              // stuck: magnets can't overcome felt grip
+      } else {
+        vx += (aFx[r] / m) * dt;                     // semi-implicit Euler: velocity first
+        vy += (aFy[r] / m) * dt;
+        const sp = Math.hypot(vx, vy);
+        if (sp > 0) {                                // kinetic (sliding) friction, never reverses motion
+          const dec = (c.staticFriction * c.kineticRatio * aGrip[r] / m) * dt;
+          const k = Math.max(0, sp - dec) / sp;
+          vx *= k; vy *= k;
+        }
+        vx *= damp; vy *= damp;                      // linear table drag
+        const sp2 = Math.hypot(vx, vy);
+        if (sp2 > c.maxSpeed) { vx *= c.maxSpeed / sp2; vy *= c.maxSpeed / sp2; }
+      }
+      aVx[r] = vx; aVy[r] = vy;
+    }
+
+    // 4) Write back velocities, advance positions (…then position from new velocity).
+    for (let i = 0; i < n; i++) {
+      const r = uf.find(i);
+      s[i].vx = aVx[r]; s[i].vy = aVy[r];
+      s[i].x += s[i].vx * dt; s[i].y += s[i].vy * dt;
+    }
+
+    // 5) Contacts → snap; 6) stones dent the cord, the (inextensible) cord pushes them back.
+    this.resolveCollisions();
+    this.dentRope();
+    this.resolveWalls();
+
+    // 7) Settle tracking.
+    let maxSp = 0;
+    for (let i = 0; i < n; i++) maxSp = Math.max(maxSp, Math.hypot(s[i].vx, s[i].vy));
+    this.time += dt;
+    this.calmTime = maxSp < c.settleSpeed ? this.calmTime + dt : 0;
+  }
+
+  /** Touching stones of different clusters snap: union, push apart to exactly touching, merge momentum. */
+  resolveCollisions() {
+    const c = this.cfg, s = this.stones, n = s.length, uf = this.uf;
+    const minD = 2 * c.stoneRadius, minD2 = minD * minD;
+    for (let iter = 0; iter < 4; iter++) {
+      let any = false;
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          const ri = uf.find(i), rj = uf.find(j);
+          if (ri === rj) continue;
+          let dx = s[j].x - s[i].x, dy = s[j].y - s[i].y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 > minD2) continue;
+          let d = Math.sqrt(d2);
+          const overlap = minD - Math.min(d, minD);       // computed before the d=0 fallback
+          if (d < 1e-9) { dx = 1; dy = 0; d = 1; }
+          const nx = dx / d, ny = dy / d;
+          const mi = uf.size[ri], mj = uf.size[rj], mt = mi + mj;
+          const relSpeed = Math.hypot(s[j].vx - s[i].vx, s[j].vy - s[i].vy);
+          // Momentum-conserving velocity merge (perfectly inelastic).
+          const vx = (mi * s[i].vx + mj * s[j].vx) / mt;
+          const vy = (mi * s[i].vy + mj * s[j].vy) / mt;
+          // Resolve overlap by translating both clusters, mass-weighted.
+          const shI = overlap * mj / mt, shJ = overlap * mi / mt;
+          for (let k = 0; k < n; k++) {
+            const rk = uf.find(k);
+            if (rk === ri) { s[k].x -= nx * shI; s[k].y -= ny * shI; }
+            else if (rk === rj) { s[k].x += nx * shJ; s[k].y += ny * shJ; }
+          }
+          const root = uf.union(ri, rj);
+          for (let k = 0; k < n; k++) if (uf.find(k) === root) { s[k].vx = vx; s[k].vy = vy; }
+          this.snapCount++;
+          any = true;
+          if (this.onSnap) this.onSnap(relSpeed);
+        }
+      }
+      if (!any) break;
+    }
+  }
+
+  /** Stones pressing on the cord shove it outward (partially: it has felt friction); the fixed length then pulls the rest in. */
+  dentRope() {
+    const c = this.cfg, s = this.stones, rope = this.rope, R = c.stoneRadius + c.ropeHalfWidth;
+    if (c.ropeYield <= 0) return;
+    let touched = false;
+    for (let i = 0; i < s.length; i++) {
+      const st = s[i];
+      if (rope.closest(st.x, st.y, R) >= R || !rope.contains(st.x, st.y)) continue;
+      if (rope.pushOutOfCircle(st.x, st.y, R, c.ropeYield)) touched = true;
+    }
+    if (touched) { rope.solveLength(c.ropeIterations); rope.clampToBoard(); }
+  }
+
+  /** The cord as a wall: push each cluster (rigidly) back inside and kill most of the outward velocity. */
+  resolveWalls() {
+    const c = this.cfg, s = this.stones, n = s.length, uf = this.uf, rope = this.rope;
+    const R = c.stoneRadius + c.ropeHalfWidth;
+    const { wPen, wNx, wNy } = this;
+    for (let iter = 0; iter < 3; iter++) {
+      wPen.fill(0);
+      let any = false;
+      for (let i = 0; i < n; i++) {                  // deepest penetration per cluster root
+        const p = rope.penetration(s[i].x, s[i].y, R);
+        if (p <= 0) continue;
+        const r = uf.find(i);
+        if (p > wPen[r]) { wPen[r] = p; wNx[r] = rope.nx; wNy[r] = rope.ny; any = true; }
+      }
+      if (!any) break;
+      for (let i = 0; i < n; i++) {
+        const r = uf.find(i), pen = wPen[r];
+        if (pen <= 0) continue;
+        const nx = wNx[r], ny = wNy[r];              // points inward
+        s[i].x += nx * pen; s[i].y += ny * pen;
+        const vin = s[i].vx * nx + s[i].vy * ny;     // members share velocity → same for all
+        if (vin < 0) { s[i].vx -= (1 + c.wallBounce) * vin * nx; s[i].vy -= (1 + c.wallBounce) * vin * ny; }
+      }
+    }
+  }
+
+  /** End of turn: catch contacts created by the last wall push so they count for THIS turn, not the next. */
+  finalize() { this.resolveCollisions(); this.resolveWalls(); }
+
+  isInCluster(i) { return i < this.uf.size.length && this.uf.sizeOf(i) >= 2; }
+
+  /** Every cluster of 2+ stones formed during this turn. */
+  formedClusters() {
+    const groups = new Map();
+    for (let i = 0; i < this.stones.length; i++) {
+      if (this.uf.sizeOf(i) < 2) continue;
+      const r = this.uf.find(i);
+      if (!groups.has(r)) groups.set(r, []);
+      groups.get(r).push(this.stones[i]);
+    }
+    return [...groups.values()];
+  }
+}
+
+/* --------------------------------------------------------------- 5. GameState */
+/** Phases: 'placing' → 'simulating' → ('resolving') → 'placing' | 'gameover'. */
+class GameState {
+  constructor(cfg) { this.cfg = cfg; this.rope = new Rope(cfg); this.reset(2, 12); }
+
+  reset(playerCount, perPlayer) {
+    this.rope.reset();                                        // cord persists across turns, not games
+    this.drag = null;
+    this.ropeSnap = null;                                     // a drag in progress must not restore an old-game cord
+    this.playerCount = playerCount;
+    this.perPlayer = perPlayer;
+    this.counts = new Array(playerCount).fill(perPlayer);   // stones left in each tray
+    this.current = 0;
+    this.stones = [];
+    this.phase = 'placing';
+    this.winner = -1;
+    this.turn = 1;
+    this.nextId = 1;
+  }
+
+  /** Returns null if OK, else 'outside' | 'overlap'. */
+  validatePlacement(x, y) {
+    const c = this.cfg;
+    // Fully inside the cord: center inside the loop and >= r + cord half-width from every segment.
+    if (!this.rope.containsCircle(x, y, c.stoneRadius + c.ropeHalfWidth - 1e-4)) return 'outside';
+    const min2 = (2 * c.stoneRadius) ** 2;
+    for (const st of this.stones) {
+      const dx = st.x - x, dy = st.y - y;
+      if (dx * dx + dy * dy < min2) return 'overlap';
+    }
+    return null;
+  }
+
+  /* ---- Dragging the ghost stone ----
+     Coming from the tray the ghost just follows the pointer. Once it has been fully inside the cord,
+     it is "armed": it now moves in short sub-steps, can't cross the cord, and pushes it outward. */
+  /* The cord is snapshotted when a drag starts. If the drag ends without a stone being placed
+     (dropped off-board, invalid spot, cancelled), the cord is restored to that snapshot. */
+  beginDrag() {
+    this.drag = { x: 0, y: 0, onBoard: false, armed: false, pushing: false, valid: false, reason: 'off', committed: false };
+    this.ropeSnap = { x: this.rope.x.slice(), y: this.rope.y.slice() };
+    return this.drag;
+  }
+  endDrag() {
+    if (this.drag && !this.drag.committed && this.ropeSnap) {
+      this.rope.x.set(this.ropeSnap.x); this.rope.y.set(this.ropeSnap.y);
+      this.rope.version++;                                    // renderer rebuilds the cord path
+    }
+    this.drag = null;
+    this.ropeSnap = null;
+  }
+
+  /** Move the ghost toward the pointer target (board units). Returns the drag state. */
+  dragTo(tx, ty, onBoard, maxSteps = 64) {
+    const d = this.drag;
+    if (!d) return null;
+    d.pushing = false;
+    if (!onBoard) { d.onBoard = false; d.valid = false; d.reason = 'off'; return d; }
+    d.onBoard = true;
+    if (!d.armed) { d.x = tx; d.y = ty; }
+    else this.stepGhost(d, tx, ty, maxSteps);
+    d.reason = this.validatePlacement(d.x, d.y);
+    d.valid = !d.reason;
+    if (!d.armed && d.reason !== 'outside') d.armed = true;
+    return d;
+  }
+
+  stepGhost(d, tx, ty, maxSteps) {
+    const c = this.cfg, rope = this.rope, R = c.stoneRadius + c.ropeHalfWidth;
+    let obstacles = null, pushes = 0;
+    for (let k = 0; k < maxSteps; k++) {
+      const dx = tx - d.x, dy = ty - d.y, dist = Math.hypot(dx, dy);
+      if (dist < 1e-7) break;
+      // Free space: move up to the current clearance in one go; near the cord: ghostStep at a time.
+      const clear = rope.closest(d.x, d.y) - R;
+      const s = Math.min(dist, Math.max(c.ghostStep, clear));
+      let nx = d.x + dx / dist * s, ny = d.y + dy / dist * s;
+      if (rope.closest(nx, ny, R) < R) {
+        if (!obstacles || pushes % 8 === 0) obstacles = this.stonesNearRope(R + 0.08);
+        const sx = rope.x.slice(), sy = rope.y.slice();
+        rope.pushFromGhost(nx, ny, R, obstacles, R);
+        if (rope.selfIntersects()) { rope.x.set(sx); rope.y.set(sy); rope.version++; break; }  // would fold: treat as jammed
+        rope.projectCircleInside(nx, ny, R);
+        nx = rope.ox; ny = rope.oy;
+        d.pushing = true; d.pushed = true; pushes++;
+        const moved = Math.hypot(nx - d.x, ny - d.y);
+        d.x = nx; d.y = ny;
+        if (moved < c.ghostStep * 0.1) break;                  // jammed: cord is taut against stones / board
+      } else { d.x = nx; d.y = ny; }
+    }
+  }
+
+  stonesNearRope(margin) {
+    const out = [];
+    for (const st of this.stones) if (this.rope.closest(st.x, st.y, margin) < margin) out.push(st);
+    return out;
+  }
+
+  placeStone(x, y, rand = Math.random) {
+    if (this.phase !== 'placing' || this.counts[this.current] <= 0) return null;
+    if (this.validatePlacement(x, y)) return null;
+    const st = new Stone(this.nextId++, x, y, rand() * 2 - 1);
+    if (this.drag) this.drag.committed = true;                // keep the pushed cord shape
+    this.stones.push(st);
+    this.counts[this.current]--;
+    this.phase = 'simulating';
+    return st;
+  }
+
+  /** clusters: arrays of stones that snapped this turn. The current player takes them all. */
+  resolveTurn(clusters) {
+    const removed = new Set();
+    for (const cl of clusters) for (const st of cl) removed.add(st);
+    const before = this.stones.length;
+    this.stones = this.stones.filter(st => !removed.has(st));
+    for (const st of this.stones) { st.vx = 0; st.vy = 0; }
+    const player = this.current, taken = before - this.stones.length;
+    this.counts[player] += taken;
+    const result = { player, taken, winner: -1 };
+    if (this.counts[player] === 0) {
+      this.phase = 'gameover';
+      this.winner = player;
+      result.winner = player;
+    } else {
+      this.current = (player + 1) % this.playerCount;
+      this.phase = 'placing';
+      this.turn++;
+    }
+    return result;
+  }
+}
+// #endregion CORE
+
+/* ===================================================================== SHELL */
+const $ = (sel) => document.querySelector(sel);
+const TAU = Math.PI * 2;
+const TOUCH_LIFT_PX = 46;   // ghost floats above the finger on touch so you can see it
+const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ------------------------------------------------------------------- 6. Theme */
+class Theme {
+  constructor() { this.read(); }
+  read() {
+    const cs = getComputedStyle(document.documentElement);
+    const g = (name) => cs.getPropertyValue(name).trim();
+    this.felt1 = g('--felt-1'); this.felt2 = g('--felt-2'); this.feltEdge = g('--felt-edge');
+    this.speckLight = g('--felt-speck-light'); this.speckDark = g('--felt-speck-dark');
+    this.rope1 = g('--rope-1'); this.rope2 = g('--rope-2'); this.rope3 = g('--rope-3'); this.ropeShadow = g('--rope-shadow');
+    this.stoneHi = g('--stone-hi'); this.stoneMid = g('--stone-mid'); this.stoneDark = g('--stone-dark');
+    this.stoneRim = g('--stone-rim'); this.stoneSpec = g('--stone-spec'); this.stoneShadow = g('--stone-shadow');
+    this.ghostOk = g('--ghost-ok'); this.ghostBad = g('--ghost-bad');
+    this.range = g('--range'); this.rangeHot = g('--range-hot'); this.snap = g('--snap');
+  }
+}
+
+/* ---------------------------------------------------------------- 7. Renderer */
+class Renderer {
+  constructor(canvas, cfg, theme) {
+    this.canvas = canvas; this.ctx = canvas.getContext('2d');
+    this.cfg = cfg; this.t = theme;
+    this.S = 300; this.dpr = 1; this.bg = null;
+    this.ropeLayer = null; this.ropeKey = -1;
+  }
+
+  /** cssSize: square side in CSS pixels. Backing store is scaled by devicePixelRatio. */
+  resize(cssSize) {
+    this.S = cssSize;
+    this.dpr = Math.min(window.devicePixelRatio || 1, 3);
+    this.canvas.style.width = cssSize + 'px';
+    this.canvas.style.height = cssSize + 'px';
+    this.canvas.width = Math.round(cssSize * this.dpr);
+    this.canvas.height = Math.round(cssSize * this.dpr);
+    this.buildBackground();
+  }
+
+  /** Felt is static: render once to an offscreen canvas. */
+  buildBackground() {
+    const S = this.S, dpr = this.dpr, t = this.t;
+    const c = document.createElement('canvas');
+    c.width = this.canvas.width; c.height = this.canvas.height;
+    const g = c.getContext('2d');
+    g.scale(dpr, dpr);
+
+    // Felt
+    const grad = g.createRadialGradient(S * .5, S * .45, S * .05, S * .5, S * .5, S * .78);
+    grad.addColorStop(0, t.felt1); grad.addColorStop(.65, t.felt2); grad.addColorStop(1, t.feltEdge);
+    g.fillStyle = grad; g.fillRect(0, 0, S, S);
+
+    // Fibres & speckles (deterministic PRNG so it doesn't shimmer on resize)
+    let seed = 1337;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const count = Math.round(S * S / 60);
+    for (let i = 0; i < count; i++) {
+      const x = rnd() * S, y = rnd() * S, a = rnd() * TAU, l = 1 + rnd() * 3;
+      g.strokeStyle = rnd() < .5 ? t.speckLight : t.speckDark;
+      g.lineWidth = .7;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+    }
+
+    this.bg = c;
+    this.ropeKey = -1;                              // theme / size changed: redraw the cord too
+  }
+
+  /** Smooth closed curve through the cord nodes: quadratic Béziers between segment midpoints. */
+  ropePath(g, rope, ox, oy) {
+    const X = rope.x, Y = rope.y, n = rope.n, S = this.S;
+    g.beginPath();
+    g.moveTo((X[n - 1] + X[0]) * .5 * S + ox, (Y[n - 1] + Y[0]) * .5 * S + oy);
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      g.quadraticCurveTo(X[i] * S + ox, Y[i] * S + oy, (X[i] + X[j]) * .5 * S + ox, (Y[i] + Y[j]) * .5 * S + oy);
+    }
+    g.closePath();
+  }
+
+  /** Braided cord, cached in its own layer and rebuilt only when the cord moves (rope.version). */
+  buildRopeLayer(rope) {
+    if (!this.ropeLayer) this.ropeLayer = document.createElement('canvas');
+    const c = this.ropeLayer;
+    if (c.width !== this.canvas.width || c.height !== this.canvas.height) { c.width = this.canvas.width; c.height = this.canvas.height; }
+    const g = c.getContext('2d'), S = this.S, t = this.t;
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, c.width, c.height);
+    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const w = 2 * this.cfg.ropeHalfWidth * S;
+    g.lineJoin = 'round'; g.lineWidth = w;
+    g.strokeStyle = t.ropeShadow; this.ropePath(g, rope, w * .15, w * .35); g.stroke();
+    g.strokeStyle = t.rope2; this.ropePath(g, rope, 0, 0); g.stroke();
+    g.lineWidth = w * .72; g.strokeStyle = t.rope1; g.stroke();
+    // Twist strands: short slanted strokes along the curve, batched into two paths.
+    const X = rope.x, Y = rope.y, n = rope.n, sp = w * .55, hw = w * .38;
+    const a = new Path2D(), b = new Path2D();
+    for (let i = 0; i < n; i++) {
+      const h = (i + n - 1) % n, j = (i + 1) % n;
+      const p0x = (X[h] + X[i]) * .5 * S, p0y = (Y[h] + Y[i]) * .5 * S, p1x = X[i] * S, p1y = Y[i] * S;
+      const p2x = (X[i] + X[j]) * .5 * S, p2y = (Y[i] + Y[j]) * .5 * S;
+      const len = Math.hypot(p1x - p0x, p1y - p0y) + Math.hypot(p2x - p1x, p2y - p1y);
+      const K = Math.max(1, Math.round(len / sp));
+      for (let k = 0; k < K; k++) {
+        const u = (k + .5) / K, v = 1 - u;
+        const px = v * v * p0x + 2 * v * u * p1x + u * u * p2x, py = v * v * p0y + 2 * v * u * p1y + u * u * p2y;
+        let tx = v * (p1x - p0x) + u * (p2x - p1x), ty = v * (p1y - p0y) + u * (p2y - p1y);
+        const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+        const nx = -ty, ny = tx;
+        a.moveTo(px - nx * hw - tx * sp * .5, py - ny * hw - ty * sp * .5);
+        a.lineTo(px + nx * hw + tx * sp * .5, py + ny * hw + ty * sp * .5);
+        const qx = px + tx * sp * .45, qy = py + ty * sp * .45;
+        b.moveTo(qx - nx * hw - tx * sp * .5, qy - ny * hw - ty * sp * .5);
+        b.lineTo(qx + nx * hw + tx * sp * .5, qy + ny * hw + ty * sp * .5);
+      }
+    }
+    g.lineCap = 'round';
+    g.strokeStyle = t.rope3; g.globalAlpha = .55; g.lineWidth = w * .16; g.stroke(a);
+    g.strokeStyle = t.rope2; g.globalAlpha = .6; g.lineWidth = w * .08; g.stroke(b);
+    g.globalAlpha = 1;
+    this.ropeKey = rope.version;
+  }
+
+  /** Warm glow on the stretch of cord the ghost is pressing against. */
+  drawRopeGlow(ctx, rope, gx, gy) {
+    const S = this.S, X = rope.x, Y = rope.y, n = rope.n, reach = 0.12;
+    const w = 2 * this.cfg.ropeHalfWidth * S;
+    ctx.save();
+    ctx.lineCap = 'round'; ctx.lineWidth = w * 1.15; ctx.strokeStyle = this.t.rangeHot;
+    for (let i = 0; i < n; i++) {
+      const d = Math.hypot(X[i] - gx, Y[i] - gy);
+      if (d >= reach) continue;
+      const h = (i + n - 1) % n, j = (i + 1) % n;
+      ctx.globalAlpha = .4 * (1 - d / reach);
+      ctx.beginPath();
+      ctx.moveTo((X[h] + X[i]) * .5 * S, (Y[h] + Y[i]) * .5 * S);
+      ctx.quadraticCurveTo(X[i] * S, Y[i] * S, (X[i] + X[j]) * .5 * S, (Y[i] + Y[j]) * .5 * S);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  drawStoneShadow(ctx, px, py, r) {
+    const ox = px + r * .18, oy = py + r * .3, rr = r * 1.3;
+    const g = ctx.createRadialGradient(ox, oy, r * .2, ox, oy, rr);
+    g.addColorStop(0, this.t.stoneShadow); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ox, oy, rr, 0, TAU); ctx.fill();
+  }
+
+  /** Glossy hematite: dark radial body, bounce light on the rim, sharp specular highlight. */
+  drawStoneBody(ctx, px, py, r) {
+    const t = this.t;
+    const g = ctx.createRadialGradient(px - r * .38, py - r * .42, r * .04, px, py, r);
+    g.addColorStop(0, t.stoneHi); g.addColorStop(.22, t.stoneMid); g.addColorStop(.78, t.stoneDark); g.addColorStop(1, t.stoneRim);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, r, 0, TAU); ctx.fill();
+    ctx.save();
+    ctx.globalAlpha *= .3; ctx.strokeStyle = t.stoneHi; ctx.lineWidth = Math.max(1, r * .08);
+    ctx.beginPath(); ctx.arc(px, py, r * .84, .1 * Math.PI, .6 * Math.PI); ctx.stroke();
+    ctx.restore();
+    ctx.save();
+    ctx.translate(px - r * .36, py - r * .42); ctx.rotate(-.7); ctx.scale(1, .55);
+    const sg = ctx.createRadialGradient(0, 0, 0, 0, 0, r * .32);
+    sg.addColorStop(0, t.stoneSpec); sg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(0, 0, r * .32, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * view: { drag: {x,y,onBoard,valid,armed,pushing}|null, showRanges, clusterOf: (i)=>bool, highlight: Set|null }
+   */
+  draw(stones, rope, view) {
+    const ctx = this.ctx, S = this.S, t = this.t, cfg = this.cfg;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (this.bg) ctx.drawImage(this.bg, 0, 0); else ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const r = cfg.stoneRadius * S;
+    const drag = view.drag && view.drag.onBoard ? view.drag : null;
+
+    if (this.ropeKey !== rope.version || !this.ropeLayer) this.buildRopeLayer(rope);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(this.ropeLayer, 0, 0);
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    if (drag && drag.armed && rope.closest(drag.x, drag.y, 0.03) < cfg.stoneRadius + cfg.ropeHalfWidth + 0.02) {
+      this.drawRopeGlow(ctx, rope, drag.x, drag.y);
+    }
+
+    // Danger zones (debug)
+    if (drag && view.showRanges) {
+      const nominal = cfg.nominalSnapDistance;
+      for (const st of stones) {
+        const d = Math.hypot(st.x - drag.x, st.y - drag.y);
+        const hot = d < cfg.maxRange;
+        ctx.setLineDash([]);
+        ctx.lineWidth = hot ? 1.6 : 1;
+        ctx.strokeStyle = hot ? t.rangeHot : t.range;
+        ctx.beginPath(); ctx.arc(st.x * S, st.y * S, cfg.maxRange * S, 0, TAU); ctx.stroke();
+        if (nominal < cfg.maxRange) {
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath(); ctx.arc(st.x * S, st.y * S, nominal * S, 0, TAU); ctx.stroke();
+        }
+      }
+      ctx.setLineDash([]);
+    }
+
+    for (const st of stones) this.drawStoneShadow(ctx, st.x * S, st.y * S, r);
+    for (let i = 0; i < stones.length; i++) {
+      const st = stones[i];
+      this.drawStoneBody(ctx, st.x * S, st.y * S, r);
+      const inCluster = (view.highlight && view.highlight.has(st)) || (view.clusterOf && view.clusterOf(i));
+      if (inCluster) {
+        ctx.strokeStyle = t.snap; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(st.x * S, st.y * S, r + 3, 0, TAU); ctx.stroke();
+      }
+    }
+
+    // Ghost
+    if (drag) {
+      const px = drag.x * S, py = drag.y * S;
+      ctx.save();
+      ctx.globalAlpha = .55;
+      this.drawStoneBody(ctx, px, py, r);
+      ctx.restore();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = drag.valid ? t.ghostOk : t.ghostBad;
+      ctx.beginPath(); ctx.arc(px, py, r + 3, 0, TAU); ctx.stroke();
+      if (!drag.valid) {
+        ctx.globalAlpha = .25; ctx.fillStyle = t.ghostBad;
+        ctx.beginPath(); ctx.arc(px, py, r, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+      }
+    }
+  }
+}
+
+/* --------------------------------------------------------------------- 8. Sfx */
+class Sfx {
+  constructor() { this.ctx = null; this.muted = false; this.lastT = 0; this.noise = null; }
+  /** Must be called from a user gesture (pointerdown / click). */
+  unlock() {
+    try {
+      if (!this.ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        this.ctx = new AC();
+        const len = Math.floor(this.ctx.sampleRate * 0.03);
+        const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+        this.noise = buf;
+      }
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+    } catch (e) { /* audio is optional */ }
+  }
+  click(relSpeed) {
+    const ctx = this.ctx;
+    if (!ctx || this.muted) return;
+    const now = ctx.currentTime;
+    if (now - this.lastT < 0.03) return;
+    this.lastT = now;
+    const vol = Math.min(1, 0.3 + relSpeed * 0.5);
+    try {
+      const src = ctx.createBufferSource(); src.buffer = this.noise;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3200; bp.Q.value = 1.2;
+      const g = ctx.createGain(); g.gain.value = 0.9 * vol;
+      src.connect(bp); bp.connect(g); g.connect(ctx.destination); src.start(now);
+      const o = ctx.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime(2400, now); o.frequency.exponentialRampToValueAtTime(900, now + 0.05);
+      const og = ctx.createGain(); og.gain.setValueAtTime(0.22 * vol, now); og.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+      o.connect(og); og.connect(ctx.destination); o.start(now); o.stop(now + 0.08);
+    } catch (e) { /* ignore */ }
+  }
+}
+
+/* ------------------------------------------------------------------- 9. Input */
+/**
+ * Drag starts on the tray; pointer capture keeps events flowing to the tray
+ * while the finger moves over the canvas. Client coords are mapped into board
+ * units via the canvas rect.
+ */
+class Input {
+  constructor(app) {
+    this.app = app;
+    this.tray = $('#tray');
+    this.canvas = app.canvas;
+    this.pid = null;
+    this.lift = 0;
+    this.tray.addEventListener('pointerdown', (e) => this.onDown(e));
+    this.tray.addEventListener('pointermove', (e) => this.onMove(e));
+    this.tray.addEventListener('pointerup', (e) => this.onUp(e));
+    this.tray.addEventListener('pointercancel', (e) => this.onCancel(e));
+    this.tray.addEventListener('lostpointercapture', (e) => this.onCancel(e));
+  }
+  onDown(e) {
+    if (this.pid !== null || e.button > 0) return;
+    this.app.sfx.unlock();
+    if (!this.app.canStartDrag()) return;
+    e.preventDefault();
+    try { this.tray.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
+    this.pid = e.pointerId;
+    this.lift = e.pointerType === 'mouse' ? 0 : TOUCH_LIFT_PX;
+    this.tray.classList.add('dragging');
+    this.app.beginDrag();
+    this.update(e);
+  }
+  onMove(e) {
+    if (e.pointerId !== this.pid) return;
+    e.preventDefault();
+    this.update(e);
+  }
+  onUp(e) {
+    if (e.pointerId !== this.pid) return;
+    this.update(e);                                        // catch the ghost up to the release point
+    const d = this.app.drag ? { ...this.app.drag } : null;
+    // Place BEFORE ending the drag: ending an uncommitted drag restores the cord's pre-drag shape.
+    const placed = !!(d && d.onBoard && d.valid) && this.app.tryPlace(d.x, d.y);
+    this.end();
+    if (placed || !d || !d.onBoard) return;                // off-board drop: cord restored, nothing else
+    this.app.ui.toast((d.reason === 'overlap' ? 'Too close: stones can’t overlap' : 'Place it inside the cord') + (d.pushed ? ' · cord reset' : ''));
+  }
+  onCancel(e) { if (e.pointerId === this.pid) this.end(); }
+  end() {
+    this.pid = null;
+    this.app.endDrag();
+    this.tray.classList.remove('dragging');
+  }
+  update(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - this.lift - rect.top) / rect.height;
+    const onBoard = x >= 0 && x <= 1 && y >= 0 && y <= 1;
+    this.app.dragTarget = { x, y, onBoard };
+    this.app.stepDrag();
+  }
+}
+
+/* ---------------------------------------------------------------------- 10. UI */
+const TUNABLES = [
+  { key: 'strength', cs: 'Strength', label: 'Magnet strength k', min: 0.005, max: 0.12, step: 0.001, dec: 3,
+    help: 'F = k / d². Higher = snaps from farther, faster.' },
+  { key: 'maxRange', cs: 'MaxRange', label: 'Max range', min: 0.06, max: 0.40, step: 0.005, dec: 3, dist: true,
+    help: 'Center-to-center cutoff. Zero force beyond.' },
+  { key: 'staticFriction', cs: 'StaticFriction', label: 'Static friction threshold Fs', min: 0.2, max: 6, step: 0.05, dec: 2,
+    help: 'Pull needed to break a resting stone loose. The "safe distance" knob.' },
+  { key: 'kineticRatio', cs: 'KineticFrictionRatio', label: 'Sliding friction (× Fs)', min: 0.05, max: 1, step: 0.05, dec: 2,
+    help: 'Friction while moving, as a fraction of Fs.' },
+  { key: 'damping', cs: 'Damping', label: 'Damping', min: 0, max: 8, step: 0.1, dec: 1,
+    help: 'Linear table drag (1/s). Higher = calmer slides.' },
+  { key: 'stoneRadius', cs: 'StoneRadius', label: 'Stone radius', min: 0.02, max: 0.05, step: 0.001, dec: 3,
+    help: 'Board units (board side = 1).' },
+  { key: 'gripJitter', cs: 'GripJitter', label: 'Grip variance ±', min: 0, max: 0.8, step: 0.01, dec: 2,
+    help: 'Per-stone random spread of Fs. Creates the risky middle band.' },
+  { key: 'ropeYield', cs: 'RopeYield', label: 'Cord give', min: 0, max: 1, step: 0.05, dec: 2,
+    help: 'How much a sliding stone dents the cord. 0 = rigid wall, 1 = cord yields fully.' },
+];
+
+class UI {
+  constructor(app) {
+    this.app = app;
+    this.toastTimer = 0;
+    this.buildSliders();
+    this.buildSetup();
+    this.bind();
+    this.refreshConfig();
+  }
+
+  buildSliders() {
+    const host = $('#sliders');
+    for (const t of TUNABLES) {
+      const row = document.createElement('div');
+      row.className = 'slider';
+      row.innerHTML =
+        `<div class="slider-top"><label for="sl-${t.key}">${t.label}</label><output id="out-${t.key}" for="sl-${t.key}"></output></div>` +
+        `<input type="range" id="sl-${t.key}" min="${t.min}" max="${t.max}" step="${t.step}">` +
+        `<div class="slider-help">${t.help}</div>`;
+      host.appendChild(row);
+      row.querySelector('input').addEventListener('input', (e) => {
+        this.app.cfg[t.key] = parseFloat(e.target.value);
+        this.refreshConfig(false);
+      });
+    }
+  }
+
+  buildSetup() {
+    const sp = $('#selPlayers'), ss = $('#selStones');
+    for (let i = 2; i <= 4; i++) sp.add(new Option(String(i), String(i), i === 2, i === 2));
+    for (let i = 6; i <= 12; i++) ss.add(new Option(String(i), String(i), i === 12, i === 12));
+  }
+
+  bind() {
+    const app = this.app;
+    const panel = $('#panel'), tuneBtn = $('#tuneBtn');
+    panel.inert = true;
+    const setPanel = (open) => {
+      panel.classList.toggle('open', open);
+      panel.inert = !open;
+      tuneBtn.setAttribute('aria-expanded', String(open));
+    };
+    tuneBtn.addEventListener('click', () => { app.sfx.unlock(); setPanel(!panel.classList.contains('open')); });
+    $('#panelClose').addEventListener('click', () => setPanel(false));
+    $('#resetCfg').addEventListener('click', () => { app.cfg.reset(); this.refreshConfig(); this.toast('Defaults restored'); });
+    $('#copyCfg').addEventListener('click', () => this.copyConfig());
+    $('#debugToggle').addEventListener('change', (e) => { app.showRanges = e.target.checked; });
+    $('#newGame').addEventListener('click', () => {
+      app.newGame(parseInt($('#selPlayers').value, 10), parseInt($('#selStones').value, 10));
+      setPanel(false);
+    });
+    $('#playAgain').addEventListener('click', () => app.newGame(app.game.playerCount, app.game.perPlayer));
+    const mute = $('#muteBtn');
+    mute.addEventListener('click', () => {
+      app.sfx.unlock();
+      app.sfx.muted = !app.sfx.muted;
+      this.renderMute();
+    });
+    this.renderMute();
+  }
+
+  renderMute() {
+    const m = this.app.sfx.muted, btn = $('#muteBtn');
+    btn.setAttribute('aria-pressed', String(m));
+    btn.setAttribute('aria-label', m ? 'Unmute sound' : 'Mute sound');
+    btn.innerHTML = m
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>';
+  }
+
+  /** Sync slider positions (optional) + readouts + derived numbers. */
+  refreshConfig(syncInputs = true) {
+    const cfg = this.app.cfg, D = cfg.diameter;
+    for (const t of TUNABLES) {
+      const v = cfg[t.key];
+      if (syncInputs) $('#sl-' + t.key).value = String(v);
+      $('#out-' + t.key).textContent = v.toFixed(t.dec) + (t.dist ? `  (${(v / D).toFixed(2)} D)` : '');
+    }
+    const fmtD = (d) => `${d.toFixed(3)} · ${(d / D).toFixed(2)} D`;
+    const contact = cfg.strength / Math.max(D, cfg.minDist) ** 2;
+    $('#derived').innerHTML =
+      `<span>Nominal break-loose distance</span><span>${fmtD(cfg.nominalSnapDistance)}</span>` +
+      `<span>Pair always snaps closer than</span><span>${fmtD(cfg.guaranteedSnapDistance)}</span>` +
+      `<span>Pair always safe beyond</span><span>${fmtD(cfg.guaranteedSafeDistance)}</span>` +
+      `<span>Pull at contact / Fs</span><span>${(contact / cfg.staticFriction).toFixed(1)}×</span>` +
+      `<span class="note">Distances are center-to-center; D = stone diameter (${D.toFixed(3)}). Several nearby stones add up, so real boards are riskier than the pair numbers.</span>`;
+  }
+
+  buildCSharp() {
+    const c = this.app.cfg;
+    const f = (v) => { let s = String(+v.toFixed(5)); if (!s.includes('.')) s += '.0'; return s + 'f'; };
+    const line = (name, v, comment) => `    public const float ${(name + ' =').padEnd(24)} ${(f(v) + ';').padEnd(12)} // ${comment}`;
+    return [
+      '// Stones Attract magnet tuning, exported from the browser prototype.',
+      '// Units: board side = 1.0, seconds, mass = 1 per stone (force == acceleration).',
+      'namespace StonesAttract.Core;',
+      '',
+      'public static class MagnetConfig',
+      '{',
+      line('Strength', c.strength, 'k in F = k / max(d, MinDistance)^2'),
+      line('MaxRange', c.maxRange, 'center-to-center cutoff, zero force beyond'),
+      line('StaticFriction', c.staticFriction, 'break-loose force per stone'),
+      line('KineticFrictionRatio', c.kineticRatio, 'sliding friction = StaticFriction * ratio'),
+      line('Damping', c.damping, 'linear velocity damping (1/s)'),
+      line('StoneRadius', c.stoneRadius, 'board units'),
+      line('GripJitter', c.gripJitter, 'per-stone static friction = Fs * (1 +/- jitter)'),
+      line('MinDistanceFactor', c.minDistFactor, 'dMin = StoneRadius * factor'),
+      line('RingRadius', c.ringRadius, 'cord inner edge starts as this circle, centered at (0.5, 0.5)'),
+      `    public const int   ${'RopeNodes ='.padEnd(24)} ${(c.ropeNodes + ';').padEnd(12)} // cord nodes; segment rest length = initial spacing`,
+      line('RopeHalfWidth', c.ropeHalfWidth, 'stone touches cord at StoneRadius + this from centerline'),
+      line('RopeYield', c.ropeYield, 'fraction of overlap the cord gives per substep'),
+      `    public const int   ${'RopeIterations ='.padEnd(24)} ${(c.ropeIterations + ';').padEnd(12)} // length-constraint sweeps per solve`,
+      line('RopeMinRatio', c.ropeMinRatio, 'slack limit: min segment length = rest * ratio'),
+      line('GhostStep', c.ghostStep, 'max ghost travel per sub-step while pushing the cord'),
+      `    public const float ${'FixedDt ='.padEnd(24)} ${'1f / 120f;'.padEnd(12)} // physics substep (s)`,
+      line('RestSpeed', c.restSpeed, 'static friction applies below this speed'),
+      line('SettleSpeed', c.settleSpeed, 'turn ends when all speeds are below this...'),
+      line('SettleTime', c.settleTime, '...for this long (s)'),
+      line('MaxSpeed', c.maxSpeed, 'safety clamp'),
+      line('MaxSimTime', c.maxSimTime, 'hard stop per turn (s)'),
+      line('WallBounce', c.wallBounce, 'restitution against the cord'),
+      '}',
+    ].join('\n');
+  }
+
+  copyConfig() {
+    const text = this.buildCSharp();
+    const fallback = () => {
+      const ta = $('#copyFallback');
+      ta.hidden = false; ta.value = text;
+      ta.focus(); ta.select();
+      this.toast('Clipboard blocked: text selected below');
+    };
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.writeText) { fallback(); return; }
+      navigator.clipboard.writeText(text).then(() => {
+        $('#copyFallback').hidden = true;
+        this.toast('C# config copied');
+      }).catch(fallback);
+    } catch (e) { fallback(); }
+  }
+
+  toast(msg, kind = '') {
+    const el = $('#toast');
+    el.textContent = msg;
+    el.className = 'toast show' + (kind ? ' ' + kind : '');
+    clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => { el.className = 'toast' + (kind ? ' ' + kind : ''); }, 1800);
+  }
+
+  /** Redraw top bar, scores and tray from GameState. */
+  render() {
+    const g = this.app.game, cur = g.current;
+    const color = (p) => `var(--p${p + 1})`;
+    $('#turnDot').style.setProperty('--pc', color(cur));
+    $('#turnTitle').textContent = `Player ${cur + 1}`;
+    $('#turnSub').textContent = {
+      placing: 'Drag a stone from your tray',
+      simulating: 'Magnets settling…',
+      resolving: 'Snap!',
+      gameover: 'Game over',
+    }[g.phase];
+
+    const scores = $('#scores');
+    scores.innerHTML = '';
+    for (let p = 0; p < g.playerCount; p++) {
+      const el = document.createElement('div');
+      el.className = 'score' + (p === cur ? ' active' : '');
+      el.style.setProperty('--pc', color(p));
+      el.innerHTML = `<span class="dot"></span>P${p + 1}<b>${g.counts[p]}</b>`;
+      el.setAttribute('aria-label', `Player ${p + 1}: ${g.counts[p]} stones left`);
+      scores.appendChild(el);
+    }
+
+    const tray = $('#tray');
+    tray.style.setProperty('--pc', color(cur));
+    $('#trayDot').style.setProperty('--pc', color(cur));
+    $('#trayLabel').textContent = `Player ${cur + 1}'s tray`;
+    const n = g.counts[cur];
+    $('#trayCount').textContent = `${n} left`;
+    tray.classList.toggle('disabled', g.phase !== 'placing');
+    const host = $('#trayStones');
+    host.innerHTML = '';
+    const shown = Math.min(n, 14);
+    for (let i = 0; i < shown; i++) {
+      const s = document.createElement('span');
+      s.className = 'mini-stone';
+      host.appendChild(s);
+    }
+    if (n > shown) {
+      const more = document.createElement('span');
+      more.className = 'tray-more'; more.textContent = `+${n - shown}`;
+      host.appendChild(more);
+    }
+  }
+
+  showWinner(player) {
+    $('#winnerDot').style.setProperty('--pc', `var(--p${player + 1})`);
+    $('#winnerText').textContent = `Player ${player + 1} wins!`;
+    $('#winner').classList.add('show');
+    $('#playAgain').focus();
+  }
+  hideWinner() { $('#winner').classList.remove('show'); }
+}
+
+/* --------------------------------------------------------------------- 11. App */
+class App {
+  constructor() {
+    this.cfg = new Config();
+    this.game = new GameState(this.cfg);
+    this.physics = new Physics(this.cfg, this.game.rope);
+    this.theme = new Theme();
+    this.sfx = new Sfx();
+    this.canvas = $('#board');
+    this.renderer = new Renderer(this.canvas, this.cfg, this.theme);
+    this.drag = null;          // ghost state for the renderer (GameState.drag)
+    this.dragTarget = null;    // latest pointer position in board units
+    this.showRanges = true;
+    this.highlight = null;
+    this.acc = 0;
+    this.last = 0;
+    this.gen = 0;
+    this.resolveTimer = 0;
+    this.ui = new UI(this);
+    this.input = new Input(this);
+    this.physics.onSnap = (rel) => this.sfx.click(rel);
+
+    // Fit the square board into whatever space the flex layout leaves.
+    const wrap = $('#boardWrap');
+    const fit = () => {
+      const size = Math.max(120, Math.floor(Math.min(wrap.clientWidth, wrap.clientHeight)));
+      if (size !== this.renderer.S || (window.devicePixelRatio || 1) !== this.renderer.dpr) this.renderer.resize(size);
+    };
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(wrap);
+    window.addEventListener('resize', fit);
+    fit();
+
+    // Canvas follows theme changes.
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onTheme = () => { this.theme.read(); this.renderer.buildBackground(); };
+    if (mq.addEventListener) mq.addEventListener('change', onTheme); else if (mq.addListener) mq.addListener(onTheme);
+    new MutationObserver(onTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    this.ui.render();
+    requestAnimationFrame((t) => this.frame(t));
+  }
+
+  beginDrag() { this.game.beginDrag(); this.dragTarget = null; this.drag = null; }
+  endDrag() { this.game.endDrag(); this.dragTarget = null; this.drag = null; }
+  /** Advance the ghost toward the pointer (sub-stepped; may take several frames on a fast flick). */
+  stepDrag() {
+    const t = this.dragTarget;
+    if (!t || !this.game.drag) return;
+    this.drag = this.game.dragTo(t.x, t.y, t.onBoard);
+  }
+
+  canStartDrag() { return this.game.phase === 'placing' && this.game.counts[this.game.current] > 0; }
+
+  tryPlace(x, y) {
+    const st = this.game.placeStone(x, y);
+    if (!st) return false;
+    this.physics.beginTurn(this.game.stones, this.game.rope);
+    this.acc = 0;
+    this.ui.render();
+    return true;
+  }
+
+  newGame(players, perPlayer) {
+    this.gen++;                                    // invalidates a pending resolve timer
+    clearTimeout(this.resolveTimer);
+    this.game.reset(players, perPlayer);
+    this.highlight = null;
+    if (this.input) this.input.end(); else this.endDrag();
+    this.ui.hideWinner();
+    this.ui.render();
+  }
+
+  frame(t) {
+    const dtReal = this.last ? Math.min((t - this.last) / 1000, 0.1) : 0;
+    this.last = t;
+    const g = this.game, dt = this.cfg.fixedDt;
+
+    if (g.phase === 'simulating') {
+      this.acc += dtReal;
+      let steps = 0;
+      while (this.acc >= dt && steps < 16) { this.physics.step(dt); this.acc -= dt; steps++; }
+      if (steps >= 16) this.acc = 0;            // don't spiral after a stall
+      if (this.physics.isSettled()) this.endSimulation();
+    }
+
+    if (this.dragTarget && g.drag) this.stepDrag();   // ghost catches up after a fast flick
+
+    const simActive = g.phase === 'simulating' || g.phase === 'resolving';
+    this.renderer.draw(g.stones, g.rope, {
+      drag: this.drag,
+      showRanges: this.showRanges,
+      highlight: this.highlight,
+      clusterOf: simActive ? (i) => this.physics.isInCluster(i) : null,
+    });
+    requestAnimationFrame((tt) => this.frame(tt));
+  }
+
+  endSimulation() {
+    this.physics.finalize();
+    const clusters = this.physics.formedClusters();
+    if (clusters.length === 0) { this.finishTurn(clusters); return; }
+    this.game.phase = 'resolving';
+    this.highlight = new Set(clusters.flat());
+    this.ui.render();
+    const gen = this.gen;
+    this.resolveTimer = setTimeout(() => { if (gen === this.gen) this.finishTurn(clusters); }, 700);   // let the player see what snapped
+  }
+
+  finishTurn(clusters) {
+    const res = this.game.resolveTurn(clusters);
+    this.highlight = null;
+    if (res.taken > 0) this.ui.toast(`Snap! Player ${res.player + 1} takes ${res.taken} stone${res.taken === 1 ? '' : 's'}`, 'snap');
+    else this.ui.toast('Clean placement');
+    this.ui.render();
+    if (res.winner >= 0) this.ui.showWinner(res.winner);
+  }
+}
+
+new App();
+</script>
+</body>
+</html>
