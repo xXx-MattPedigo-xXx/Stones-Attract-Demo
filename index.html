@@ -57,6 +57,8 @@
     --halo-fill: rgba(236, 64, 52, .22);
     --halo-edge: rgba(255, 112, 100, .85);
     --seed-mark: rgba(255, 255, 255, .38);
+    --pause-veil: rgba(236, 230, 218, .62);
+    --pause-ink: #24211c;
 
     --p1: #e0664a;
     --p2: #2f8fa3;
@@ -93,6 +95,8 @@
       --halo-fill: rgba(255, 84, 72, .2);
       --halo-edge: rgba(255, 140, 128, .8);
       --seed-mark: rgba(255, 255, 255, .32);
+      --pause-veil: rgba(18, 20, 18, .66);
+      --pause-ink: #ebe7df;
       --p1: #f07a5e;
       --p2: #4fb3c7;
       --p3: #e8b84a;
@@ -128,6 +132,8 @@
     --halo-fill: rgba(255, 84, 72, .2);
     --halo-edge: rgba(255, 140, 128, .8);
     --seed-mark: rgba(255, 255, 255, .32);
+    --pause-veil: rgba(18, 20, 18, .66);
+    --pause-ink: #ebe7df;
     --p1: #f07a5e;
     --p2: #4fb3c7;
     --p3: #e8b84a;
@@ -167,6 +173,13 @@
     font-weight: 600; font-size: .85rem;
   }
   .icon-btn svg { width: 18px; height: 18px; }
+  .turn { min-width: 0; }
+  @media (max-width: 440px) {                       /* phones: icon-only Tune so the level title keeps one line */
+    .icon-btn .btn-label { display: none; }
+    .actions { gap: 4px; }
+    .icon-btn { padding: 0 10px; }
+    .turn h1 { font-size: 1.15rem; }
+  }
 
   .scores { display: flex; gap: 6px; flex-wrap: wrap; }
   .score {
@@ -178,6 +191,12 @@
 
   .board-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; }
   #board { display: block; touch-action: none; border-radius: 22px; box-shadow: var(--shadow); }
+  /* Clock paused (New sheet open mid-game): veil over the board. */
+  .board-wrap.paused::after {
+    content: 'Paused'; position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
+    background: var(--pause-veil); color: var(--pause-ink); border-radius: 22px;
+    font: 700 1.1rem "Space Grotesk", system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase;
+  }
 
   .toast {
     position: absolute; top: 10px; left: 50%; transform: translate(-50%, -6px); opacity: 0; pointer-events: none;
@@ -252,21 +271,38 @@
   .btn-col { display: flex; flex-direction: column; gap: 8px; }
   .btn.ghost { background: transparent; }
 
+  /* ---------- How to play ---------- */
+  .rules-card { max-width: 360px; text-align: left; display: flex; flex-direction: column; gap: 12px; max-height: 100%; overflow-y: auto; }
+  .rules-card > * { flex-shrink: 0; }
+  .rules-art svg { display: block; width: 100%; height: auto; border-radius: 14px; }
+  .rules-card h2 { justify-content: flex-start; font-size: 1.35rem; margin-top: 12px; }
+  .rules-card p { margin: 6px 0 0; color: var(--ink-soft); min-height: 4.2em; }
+  .rules-page { animation: rulesIn .22s ease; }
+  @keyframes rulesIn { from { opacity: 0; transform: translateX(10px); } }
+  .dots { display: flex; gap: 6px; justify-content: center; }
+  .dots span { width: 8px; height: 8px; border-radius: 4px; background: var(--line); transition: width .2s; }
+  .dots span.on { width: 20px; background: var(--accent); }
+  .rules-nav { display: flex; gap: 8px; }
+  .rules-nav .btn { flex: 1 1 0; }
+  .rules-nav .btn:disabled { opacity: .45; cursor: default; }
+  #helpBtn { font-family: "Space Grotesk", sans-serif; font-size: 1rem; }
+
   /* ---------- New-game sheet ---------- */
   .setup-card { text-align: left; max-width: 400px; max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
   .setup-card h2 { justify-content: flex-start; font-size: 1.4rem; }
+  .setup-card > * { flex-shrink: 0; }                 /* scroll the card; never squash its buttons */
   .mode-block { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: var(--surface-2); }
   .mode-block h3 { font-size: 1rem; }
   .mode-block p { margin: 0; font-size: .85rem; }
   .level-list { display: flex; flex-direction: column; gap: 6px; }
   .level {
-    display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 2px 10px; width: 100%; text-align: left;
+    display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 2px 10px; width: 100%; text-align: left;
     padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font: inherit; color: inherit;
   }
   .level:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .level .num {
-    grid-row: span 2; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
-    background: var(--surface-2); font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: .85rem;
+    grid-row: span 2; width: 36px; height: 28px; border-radius: 999px; display: grid; place-items: center;
+    background: var(--surface-2); font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: .8rem; font-variant-numeric: tabular-nums;
   }
   .level .name { font-weight: 700; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
   .level .meta { grid-column: 2; font-size: .78rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
@@ -275,6 +311,26 @@
   .tag { white-space: nowrap; font-size: .66rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--ink-soft); }
   .tag.frozen { background: var(--ice-bg); color: var(--ice-ink); }
   .tag.bonus { background: var(--snap); color: #2a1f00; }
+  .chapter { display: flex; flex-direction: column; gap: 6px; }
+  .chapter + .chapter { margin-top: 2px; }
+  .chapter-head {
+    display: grid; grid-template-columns: max-content 1fr 18px; align-items: center; gap: 2px 8px; width: 100%; text-align: left;
+    padding: 8px 10px; border-radius: 12px; border: 0; background: transparent; cursor: pointer; font: inherit; color: inherit;
+  }
+  .chapter-head:hover { background: color-mix(in srgb, var(--surface) 55%, transparent); }
+  .chapter-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .chapter-head .ch-title { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: .95rem; white-space: nowrap; }
+  .chapter-head .ch-title small { font-family: "Inter", sans-serif; font-weight: 600; font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); margin-right: 6px; }
+  .chapter-head .ch-badge { justify-self: end; text-align: right; font-size: .75rem; font-weight: 600; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .chapter-head .ch-badge.done { color: var(--accent); }
+  .chapter-head .ch-blurb { grid-column: 1 / 3; font-size: .78rem; color: var(--ink-soft); }
+  .chapter-head .ch-lock { display: inline-flex; align-items: center; gap: 4px; justify-content: flex-end; }
+  .chapter-head .ch-lock svg { flex: none; }
+  .chapter-head .ch-lock svg { width: 12px; height: 12px; }
+  .chapter-head .chev { grid-row: 1 / span 2; grid-column: 3; width: 18px; height: 18px; color: var(--ink-soft); transition: transform .15s; }
+  .chapter-head[aria-expanded="true"] .chev { transform: rotate(180deg); }
+  .chapter.locked .chapter-head .ch-title { color: var(--ink-soft); }
+  .chapter-body { display: flex; flex-direction: column; gap: 6px; }
   .level-group { margin-top: 6px; font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: .78rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); }
   .level-note { margin: 0; font-size: .78rem; color: var(--ink-soft); }
   .level .side.lock { max-width: 92px; line-height: 1.25; }
@@ -303,7 +359,8 @@
   .clock.low .clock-time { color: var(--warn); }
 
   @media (prefers-reduced-motion: reduce) {
-    .toast, .panel { transition: none; }
+    .toast, .panel, .chapter-head .chev, .dots span { transition: none; }
+    .rules-page { animation: none; }
   }
 </style>
 </head>
@@ -317,11 +374,12 @@
       <p id="turnSub">Drag a stone from your tray</p>
     </div>
     <div class="actions">
+      <button class="icon-btn" id="helpBtn" aria-label="How to play" aria-controls="rules">?</button>
       <button class="icon-btn" id="gameBtn" aria-controls="setup">New</button>
       <button class="icon-btn" id="muteBtn" aria-label="Mute sound" aria-pressed="false"></button>
-      <button class="icon-btn" id="tuneBtn" aria-controls="panel" aria-expanded="false">
+      <button class="icon-btn" id="tuneBtn" aria-label="Tune" aria-controls="panel" aria-expanded="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
-        Tune
+        <span class="btn-label">Tune</span>
       </button>
     </div>
   </header>
@@ -371,6 +429,7 @@
       <h3>Solo · timed</h3>
       <p>Place every stone before the clock runs out. Snapped stones go back to your tray, and the clock keeps running. Clear a level to unlock the next.</p>
       <p id="scoreRule"></p>
+      <p id="bonusRule"></p>
       <div class="level-list" id="levelList"></div>
       <p class="best" id="bestLine"></p>
     </section>
@@ -383,6 +442,23 @@
       </div>
     </section>
     <button class="btn ghost" id="setupClose">Cancel</button>
+  </div>
+</div>
+
+<div class="overlay" id="rules" role="dialog" aria-modal="true" aria-labelledby="rulesTitle" aria-describedby="rulesText">
+  <div class="card rules-card">
+    <div id="rulesBody">
+      <div class="rules-art" id="rulesArt" aria-hidden="true"></div>
+      <h2 id="rulesTitle">How to play</h2>
+      <p id="rulesText"></p>
+    </div>
+    <div class="dots" id="rulesDots" role="img" aria-label="Page 1 of 3"></div>
+    <label class="toggle" id="rulesHideRow" hidden><input type="checkbox" id="rulesHide"> Don’t show this again</label>
+    <div class="rules-nav">
+      <button class="btn ghost" id="rulesSkip">Skip</button>
+      <button class="btn" id="rulesBack">Back</button>
+      <button class="btn primary" id="rulesNext">Next</button>
+    </div>
   </div>
 </div>
 
@@ -1168,52 +1244,289 @@ class Physics {
   }
 }
 
-/* --------------------------------------------------------------- 5. GameState */
-/** Phases: 'placing' → 'simulating' → ('resolving') → 'placing' | 'gameover'. */
-/**
- * Solo levels, in unlock order. areaScale shrinks the starting cord; frozen cords can't be moved.
- * timeLimit in seconds; multiplier scales the final score. startUnlocked: open on a fresh profile.
+/* ----------------------------------------------------- 5a. Chapters & solo levels */
+/*
+ * Solo campaign: 6 chapters × (8 main + 2 bonus) = 60 levels, built by buildSoloLevels() from the compact
+ * per-chapter tables in CHAPTER_TABLE. Time limits and multipliers come from the pure ramps below, so the
+ * result is deterministic. Ids: the 12 levels of the old 10+2 list keep their ids (saved cleared sets and
+ * best scores carry over); every other level's id is its code ('2-3', bonus '2-B2').
+ * Level fields: chapter (id), index (1-8 main / 1-2 bonus), code, label, stones, timeLimit (s), areaScale
+ * (shrinks the starting cord), frozen (outer cord can't move), multiplier, inner (optional cords inside the
+ * outer one), startUnlocked; bonus levels add mode 'attract', bonus, seeds, haloD, unlockAfter.
  */
-const SOLO_LEVELS = {
-  warmup:  { label: 'Warm-up', stones: 10, timeLimit: 120, areaScale: 1,    frozen: false, multiplier: 1, startUnlocked: true },
-  easy:    { label: 'Easy',    stones: 12, timeLimit: 120, areaScale: 1,    frozen: false, multiplier: 1, startUnlocked: true },
-  normal:  { label: 'Normal',  stones: 14, timeLimit: 105, areaScale: 1,    frozen: false, multiplier: 1.5, startUnlocked: true },
-  tight:   { label: 'Tight',   stones: 14, timeLimit: 105, areaScale: 0.85, frozen: false, multiplier: 2 },
-  // ATTRACT bonus levels (opposite goal: make every placed stone snap). Not in the main chain: unlocked
-  // once `unlockAfter` is cleared. seeds = pre-placed stones (board units, >= 3.2 D apart: beyond maxRange,
-  // so they never snap on their own). haloD = no-drop distance from any stone, center-to-center, in diameters.
-  pull:    { label: 'Pull',    stones: 10, timeLimit: 90,  areaScale: 1,    frozen: false, multiplier: 2,
-             mode: 'attract', bonus: true, unlockAfter: 'tight', haloD: 2.0,
-             seeds: [[0.5, 0.5], [0.5, 0.23], [0.757, 0.417], [0.659, 0.718], [0.341, 0.718], [0.243, 0.417]] },
-  frozen:  { label: 'Frozen',  stones: 14, timeLimit: 90,  areaScale: 1,    frozen: true,  multiplier: 2, startUnlocked: true },
-  hard:    { label: 'Hard',    stones: 16, timeLimit: 90,  areaScale: 1,    frozen: false, multiplier: 2.5 },
-  squeeze: { label: 'Squeeze', stones: 16, timeLimit: 90,  areaScale: 0.8,  frozen: true,  multiplier: 3 },
-  // inner: cords inside the outer one (board units; r = inner-edge radius). island = inside off-limits,
-  // pen = inside playable; frozen inner cords are fixed walls, the others dent like the outer cord.
-  island:  { label: 'Island',  stones: 16, timeLimit: 105, areaScale: 1,    frozen: false, multiplier: 3,
-             inner: [{ kind: 'island', cx: 0.5, cy: 0.5, r: 0.11, frozen: false, eyelets: 6, slack: 1.1 }] },
-  pens:    { label: 'Pens',    stones: 16, timeLimit: 105, areaScale: 1,    frozen: false, multiplier: 3.5,
-             inner: [{ kind: 'pen', cx: 0.27, cy: 0.5, r: 0.10, frozen: true }, { kind: 'pen', cx: 0.73, cy: 0.5, r: 0.10, frozen: false }] },
-  longpull: { label: 'Long Pull', stones: 12, timeLimit: 90, areaScale: 1,   frozen: false, multiplier: 3.5,
-             mode: 'attract', bonus: true, unlockAfter: 'pens', haloD: 2.3,
-             seeds: [[0.632, 0.318], [0.714, 0.57], [0.5, 0.725], [0.286, 0.57], [0.368, 0.318]] },
-  maze:    { label: 'Maze',    stones: 18, timeLimit: 105, areaScale: 0.8,  frozen: true,  multiplier: 4,
-             inner: [{ kind: 'island', cx: 0.5, cy: 0.34, r: 0.06, frozen: true }, { kind: 'pen', cx: 0.5, cy: 0.66, r: 0.09, frozen: false }] },
-};
-/** Main unlock chain (bonus levels excluded). */
-const LEVEL_ORDER = Object.keys(SOLO_LEVELS).filter((id) => !SOLO_LEVELS[id].bonus);
-/** Bonus levels, in list order. */
-const BONUS_ORDER = Object.keys(SOLO_LEVELS).filter((id) => SOLO_LEVELS[id].bonus);
+const MAIN_PER_CHAPTER = 8;
+const START_UNLOCKED = ['1-1', '1-2', '1-3', '3-1'];     // codes open on a fresh profile
+const r3 = (v) => Math.round(v * 1000) / 1000;
+
+/** Multiplier of the g-th main level (0-based along LEVEL_ORDER, of `total`): 1.0 → 5.0, 0.1 steps. */
+function levelMultiplier(g, total) { return Math.round((1 + 4 * g / Math.max(1, total - 1)) * 10) / 10; }
 
 /**
- * Progress is the SET of cleared level ids (storage lives in the shell). A main-chain level is open iff it is
- * startUnlocked or the level before it in LEVEL_ORDER is cleared; a bonus level iff its unlockAfter is cleared.
- * cleared: Set (or anything with has()). unlockAll (Tune panel testing switch) opens every level.
+ * Seconds per stone for main level i (1-8) of chapter ch (1-based, of `chapters`): 8.0 at 1-1 → 5.5 at the
+ * final level, as a saw-tooth (each chapter starts a little looser than the previous one ended).
+ */
+function secondsPerStone(ch, i, chapters) {
+  const t = 0.75 * (ch - 1) / Math.max(1, chapters - 1) + 0.25 * (i - 1) / (MAIN_PER_CHAPTER - 1);
+  return 8 - 2.5 * t;
+}
+/** Time limit: stones × seconds per stone, rounded up to whole 5 s. */
+const mainTimeLimit = (stones, ch, i, chapters) => Math.ceil(stones * secondsPerStone(ch, i, chapters) / 5 - 1e-9) * 5;
+
+/** Attract seeds: n evenly on a ring of radius r around (cx, cy), first at `phase` degrees (-90 = top); centre seed first if asked. */
+function ringSeeds(n, r, phase = -90, centre = false, cx = 0.5, cy = 0.5) {
+  const out = centre ? [[cx, cy]] : [];
+  for (let k = 0; k < n; k++) {
+    const a = (phase + 360 * k / n) * Math.PI / 180;
+    out.push([r3(cx + Math.cos(a) * r), r3(cy + Math.sin(a) * r)]);
+  }
+  return out;
+}
+/** Attract seeds: triangular lattice with spacing s, every point within maxR of (cx, cy), row by row. */
+function hexSeeds(s, maxR, cx = 0.5, cy = 0.5) {
+  const out = [], rows = Math.ceil(maxR / (s * Math.sqrt(3) / 2));
+  for (let j = -rows; j <= rows; j++) {
+    const y = j * s * Math.sqrt(3) / 2, off = (j & 1) ? s / 2 : 0;
+    for (let i = -Math.ceil(maxR / s) - 1; i <= Math.ceil(maxR / s) + 1; i++) {
+      const x = i * s + off;
+      if (Math.hypot(x, y) <= maxR + 1e-9) out.push([r3(cx + x), r3(cy + y)]);
+    }
+  }
+  return out;
+}
+
+/** Inner-cord spec (board units; r = inner-edge radius). how: 'frozen' | 'push' | 'eyelets' (pushable, 6 eyelets, 10% slack). */
+function cordSpec(kind, r, how) {
+  const s = { kind, cx: 0.5, cy: 0.5, r, frozen: how === 'frozen' };
+  if (how === 'eyelets') { s.eyelets = 6; s.slack = 1.1; }
+  return s;
+}
+const isle = (r, how = 'push') => cordSpec('island', r, how);   // inside off-limits
+const pen = (r, how = 'push') => cordSpec('pen', r, how);       // inside playable
+/** Inner-cord layouts: one cord in the centre, two side by side or two stacked, `off` from the centre. */
+const centre = (a) => [a];
+const sideBySide = (off, a, b) => [{ ...a, cx: r3(0.5 - off) }, { ...b, cx: r3(0.5 + off) }];
+const stacked = (off, a, b) => [{ ...a, cy: r3(0.5 - off) }, { ...b, cy: r3(0.5 + off) }];
+
+/*
+ * Main rows: [id | null (= code), label, stones, areaScale, frozen, inner]. Bonus rows (attract: make every
+ * stone snap; the first unlocks after main 4, the second after main 8):
+ * [id | null, label, stones, timeLimit, haloD, seeds, areaScale, frozen, inner].
+ * The comment table above each chapter lists the derived numbers (time s, ×multiplier).
+ */
+const CHAPTER_TABLE = [
+  // Basics — code  label           stones  area  time  ×mult  cord    inner cords / attract setup
+  //          1-1   Warm-up             10  100%    80    1.0  movable -  (id warmup)
+  //          1-2   First Steps         12  100%    95    1.1  movable -  (id easy)
+  //          1-3   Steady Hand         14  100%   110    1.2  movable -  (id normal)
+  //          1-4   Breathing Room      14  100%   110    1.3  movable -
+  //          1-B1  Gather               8  100%    75    1.3  movable 4 seeds, halo 2.0 D
+  //          1-5   Elbow Room          15  100%   115    1.3  movable -
+  //          1-6   Crowded Felt        15  100%   115    1.4  movable -
+  //          1-7   Close Company       16  100%   120    1.5  movable -
+  //          1-8   Full House          16  100%   120    1.6  movable -  (id hard)
+  //          1-B2  Rally               10  100%    80    1.6  movable 6 seeds, halo 2.1 D
+  { id: 'basics', name: 'Basics', blurb: 'Place stones safely on a full board. Push the cord outward for room.',
+    main: [
+      ['warmup', 'Warm-up',        10, 1,    false],
+      ['easy',   'First Steps',    12, 1,    false],
+      ['normal', 'Steady Hand',    14, 1,    false],
+      [null,     'Breathing Room', 14, 1,    false],
+      [null,     'Elbow Room',     15, 1,    false],
+      [null,     'Crowded Felt',   15, 1,    false],
+      [null,     'Close Company',  16, 1,    false],
+      ['hard',   'Full House',     16, 1,    false],
+    ],
+    bonus: [
+      [null, 'Gather',  8, 75, 2.0, ringSeeds(4, 0.22, -45), 1, false],
+      [null, 'Rally',  10, 80, 2.1, ringSeeds(5, 0.26, -90, true), 1, false],
+    ] },
+  // Tight — code  label           stones  area  time  ×mult  cord    inner cords / attract setup
+  //         2-1   Snug                12   95%    95    1.7  movable -
+  //         2-2   Tuck In             13   92%   100    1.8  movable -
+  //         2-3   Narrow Ring         13   88%   100    1.9  movable -
+  //         2-4   Close Quarters      13   85%   100    1.9  movable -  (id tight)
+  //         2-B1  Pull                10  100%    90    1.9  movable 6 seeds, halo 2.0 D  (id pull)
+  //         2-5   Pinch               13   84%    95    2.0  movable -
+  //         2-6   Corset              13   83%    95    2.1  movable -
+  //         2-7   Shrinking Felt      14   82%   100    2.2  movable -
+  //         2-8   Pressure Ring       14   80%   100    2.3  movable -
+  //         2-B2  Tight Pull          11   85%    85    2.3  movable 6 seeds, halo 2.1 D
+  { id: 'tight', name: 'Tight', blurb: 'Smaller play areas. Less room between stones, so plan every drop.',
+    main: [
+      [null,    'Snug',           12, 0.95, false],
+      [null,    'Tuck In',        13, 0.92, false],
+      [null,    'Narrow Ring',    13, 0.88, false],
+      ['tight', 'Close Quarters', 13, 0.85, false],
+      [null,    'Pinch',          13, 0.84, false],
+      [null,    'Corset',         13, 0.83, false],
+      [null,    'Shrinking Felt', 14, 0.82, false],
+      [null,    'Pressure Ring',  14, 0.80, false],
+    ],
+    bonus: [
+      ['pull', 'Pull',       10, 90, 2.0, ringSeeds(5, 0.27, -90, true), 1, false],
+      [null,   'Tight Pull', 11, 85, 2.1, ringSeeds(5, 0.22, -90, true), 0.85, false],
+    ] },
+  // Frozen — code  label           stones  area  time  ×mult  cord    inner cords / attract setup
+  //          3-1   Cold Snap           14  100%   105    2.4  frozen  -  (id frozen)
+  //          3-2   Ice Rink            14  100%   105    2.4  frozen  -
+  //          3-3   Hoarfrost           14   95%   100    2.5  frozen  -
+  //          3-4   Rime                15   92%   105    2.6  frozen  -
+  //          3-B1  Cold Pull           11  100%    85    2.6  frozen  6 seeds, halo 2.1 D
+  //          3-5   Frostbite           15   90%   105    2.7  frozen  -
+  //          3-6   Glacier             15   87%   105    2.8  frozen  -
+  //          3-7   Permafrost          15   86%   105    2.9  frozen  -
+  //          3-8   Squeeze             15   82%   100    3.0  frozen  -  (id squeeze)
+  //          3-B2  Ice Chain           12   90%    85    3.0  frozen  5 seeds, halo 2.2 D
+  { id: 'frozen', name: 'Frozen', blurb: 'The outer cord is frozen in place. No pushing it for extra room.',
+    main: [
+      ['frozen',  'Cold Snap',  14, 1,    true],
+      [null,      'Ice Rink',   14, 1,    true],
+      [null,      'Hoarfrost',  14, 0.95, true],
+      [null,      'Rime',       15, 0.92, true],
+      [null,      'Frostbite',  15, 0.90, true],
+      [null,      'Glacier',    15, 0.87, true],
+      [null,      'Permafrost', 15, 0.86, true],
+      ['squeeze', 'Squeeze',    15, 0.82, true],
+    ],
+    bonus: [
+      [null, 'Cold Pull', 11, 85, 2.1, ringSeeds(6, 0.25, -90), 1, true],
+      [null, 'Ice Chain', 12, 85, 2.2, ringSeeds(5, 0.21, -54), 0.9, true],
+    ] },
+  // Islands — code  label           stones  area  time  ×mult  cord    inner cords / attract setup
+  //           4-1   Landfall            14  100%   100    3.0  movable pushable island r.08
+  //           4-2   Atoll               15  100%   105    3.1  movable frozen island r.09
+  //           4-3   Lagoon              15  100%   105    3.2  movable eyeleted island r.1
+  //           4-4   Anchored Isle       16  100%   110    3.3  movable eyeleted island r.11  (id island)
+  //           4-B1  Island Pull         11  100%    85    3.3  movable 6 seeds, halo 2.1 D, frozen island r.07
+  //           4-5   Twin Isles          16  100%   105    3.4  movable frozen island r.08 + pushable island r.08
+  //           4-6   Archipelago         17  100%   110    3.5  movable eyeleted island r.085 + frozen island r.085
+  //           4-7   Reef                17   95%   110    3.6  movable pushable island r.08 + pushable island r.08
+  //           4-8   Shipwreck           17   92%   110    3.6  movable frozen island r.08 + eyeleted island r.08
+  //           4-B2  Castaway            12  100%    85    3.6  movable 6 seeds, halo 2.2 D, eyeleted island r.09
+  { id: 'islands', name: 'Islands', blurb: 'Off-limits islands sit inside the cord. Some are frozen, some held by eyelets.',
+    main: [
+      [null,     'Landfall',      14, 1,    false, centre(isle(0.08, 'push'))],
+      [null,     'Atoll',         15, 1,    false, centre(isle(0.09, 'frozen'))],
+      [null,     'Lagoon',        15, 1,    false, centre(isle(0.10, 'eyelets'))],
+      ['island', 'Anchored Isle', 16, 1,    false, centre(isle(0.11, 'eyelets'))],
+      [null,     'Twin Isles',    16, 1,    false, sideBySide(0.2, isle(0.08, 'frozen'), isle(0.08, 'push'))],
+      [null,     'Archipelago',   17, 1,    false, sideBySide(0.21, isle(0.085, 'eyelets'), isle(0.085, 'frozen'))],
+      [null,     'Reef',          17, 0.95, false, sideBySide(0.2, isle(0.08, 'push'), isle(0.08, 'push'))],
+      [null,     'Shipwreck',     17, 0.92, false, stacked(0.19, isle(0.08, 'frozen'), isle(0.08, 'eyelets'))],
+    ],
+    bonus: [
+      [null, 'Island Pull', 11, 85, 2.1, ringSeeds(6, 0.27, -90), 1, false, centre(isle(0.07, 'frozen'))],
+      [null, 'Castaway',    12, 85, 2.2, ringSeeds(6, 0.27, -60), 1, false, centre(isle(0.09, 'eyelets'))],
+    ] },
+  // Pens — code  label           stones  area  time  ×mult  cord    inner cords / attract setup
+  //        5-1   Paddock             14  100%    95    3.7  movable frozen pen r.1
+  //        5-2   Corral              15  100%   100    3.8  movable pushable pen r.11
+  //        5-3   Sheepfold           15  100%    95    3.9  movable pushable pen r.12
+  //        5-4   Twin Pens           16  100%   100    4.0  movable frozen pen r.1 + pushable pen r.1  (id pens)
+  //        5-B1  Long Pull           12  100%    90    4.0  movable 5 seeds, halo 2.3 D  (id longpull)
+  //        5-5   Stockyard           16  100%   100    4.1  movable pushable pen r.1 + pushable pen r.1
+  //        5-6   Fenceline           16   95%   100    4.1  movable frozen pen r.09 + frozen pen r.09
+  //        5-7   Holding Pens        17   92%   105    4.2  movable pushable pen r.09 + frozen pen r.09
+  //        5-8   Roundup             17   90%   100    4.3  movable frozen pen r.09 + pushable pen r.09
+  //        5-B2  Pen Pull            12  100%    85    4.3  movable 5 seeds, halo 2.2 D, pushable pen r.1
+  { id: 'pens', name: 'Pens', blurb: 'Pens are playable inside, but their cords are walls you can’t cross.',
+    main: [
+      [null,   'Paddock',      14, 1,    false, centre(pen(0.10, 'frozen'))],
+      [null,   'Corral',       15, 1,    false, centre(pen(0.11, 'push'))],
+      [null,   'Sheepfold',    15, 1,    false, centre(pen(0.12, 'push'))],
+      ['pens', 'Twin Pens',    16, 1,    false, sideBySide(0.23, pen(0.10, 'frozen'), pen(0.10, 'push'))],
+      [null,   'Stockyard',    16, 1,    false, sideBySide(0.23, pen(0.10, 'push'), pen(0.10, 'push'))],
+      [null,   'Fenceline',    16, 0.95, false, sideBySide(0.21, pen(0.09, 'frozen'), pen(0.09, 'frozen'))],
+      [null,   'Holding Pens', 17, 0.92, false, sideBySide(0.2, pen(0.09, 'push'), pen(0.09, 'frozen'))],
+      [null,   'Roundup',      17, 0.90, false, stacked(0.19, pen(0.09, 'frozen'), pen(0.09, 'push'))],
+    ],
+    bonus: [
+      ['longpull', 'Long Pull', 12, 90, 2.3, ringSeeds(5, 0.225, -54), 1, false],
+      [null,       'Pen Pull',  12, 85, 2.2, ringSeeds(5, 0.27, -90), 1, false, centre(pen(0.10, 'push'))],
+    ] },
+  // Maze — code  label           stones  area  time  ×mult  cord    inner cords / attract setup
+  //        6-1   Crossroads          15   95%    95    4.4  movable frozen island r.06 + pushable pen r.09
+  //        6-2   Labyrinth           15   95%    95    4.5  frozen  eyeleted island r.09
+  //        6-3   Switchback          15   92%    90    4.6  movable frozen pen r.08 + pushable island r.07
+  //        6-4   Dead End            15   90%    90    4.7  frozen  frozen island r.07 + frozen pen r.07
+  //        6-B1  Thread              11   92%    85    4.7  frozen  5 seeds, halo 2.3 D, frozen island r.06
+  //        6-5   Minotaur            15   90%    90    4.7  frozen  eyeleted island r.07 + pushable pen r.08
+  //        6-6   Gauntlet            15   88%    90    4.8  frozen  pushable island r.07 + frozen pen r.07
+  //        6-7   Knot                16   86%    90    4.9  frozen  frozen pen r.07 + eyeleted island r.06
+  //        6-8   Maze                18   80%   100    5.0  frozen  frozen island r.06 + pushable pen r.09  (id maze)
+  //        6-B2  Minotaur’s Pull     12   92%    85    5.0  frozen  6 seeds, halo 2.3 D, pushable pen r.08
+  { id: 'maze', name: 'Maze', blurb: 'Everything at once: frozen cords, islands, pens and tight rings.',
+    main: [
+      [null,   'Crossroads', 15, 0.95, false, stacked(0.17, isle(0.06, 'frozen'), pen(0.09, 'push'))],
+      [null,   'Labyrinth',  15, 0.95, true,  centre(isle(0.09, 'eyelets'))],
+      [null,   'Switchback', 15, 0.92, false, sideBySide(0.18, pen(0.08, 'frozen'), isle(0.07, 'push'))],
+      [null,   'Dead End',   15, 0.90, true,  sideBySide(0.18, isle(0.07, 'frozen'), pen(0.07, 'frozen'))],
+      [null,   'Minotaur',   15, 0.90, true,  stacked(0.17, isle(0.07, 'eyelets'), pen(0.08, 'push'))],
+      [null,   'Gauntlet',   15, 0.88, true,  sideBySide(0.17, isle(0.07, 'push'), pen(0.07, 'frozen'))],
+      [null,   'Knot',       16, 0.86, true,  stacked(0.16, pen(0.07, 'frozen'), isle(0.06, 'eyelets'))],
+      ['maze', 'Maze',       18, 0.80, true,  stacked(0.16, isle(0.06, 'frozen'), pen(0.09, 'push'))],
+    ],
+    bonus: [
+      [null, 'Thread',          11, 85, 2.3, ringSeeds(5, 0.2, -18), 0.92, true, centre(isle(0.06, 'frozen'))],
+      [null, 'Minotaur’s Pull', 12, 85, 2.3, ringSeeds(6, 0.21, -90), 0.92, true, centre(pen(0.08, 'push'))],
+    ] },
+];
+
+/** Expands CHAPTER_TABLE into { levels (id → level, in list order), chapters }. Pure and deterministic. */
+function buildSoloLevels(table) {
+  const levels = {}, chapters = [], total = table.length * MAIN_PER_CHAPTER, start = new Set(START_UNLOCKED);
+  let g = 0;
+  table.forEach((ch, c) => {
+    const chap = { id: ch.id, index: c + 1, name: ch.name, blurb: ch.blurb, mainLevels: [], bonusLevels: [] };
+    ch.main.forEach(([id0, label, stones, areaScale, frozen, inner], k) => {
+      const i = k + 1, code = `${c + 1}-${i}`, id = id0 || code;
+      const L = { chapter: ch.id, index: i, code, label, stones, timeLimit: mainTimeLimit(stones, c + 1, i, table.length),
+        areaScale, frozen: !!frozen, multiplier: levelMultiplier(g++, total) };
+      if (inner) L.inner = inner;
+      if (start.has(code)) L.startUnlocked = true;
+      levels[id] = L; chap.mainLevels.push(id);
+      // Bonus b follows main level 4b in list order (its multiplier matches that level, so the list never drops).
+      if (i % 4 === 0 && ch.bonus[i / 4 - 1]) {
+        const b = i / 4, [bid0, bl, bs, bt, haloD, seeds, bArea, bFrozen, bInner] = ch.bonus[b - 1], bcode = `${c + 1}-B${b}`;
+        const B = { chapter: ch.id, index: b, code: bcode, label: bl, stones: bs, timeLimit: bt, areaScale: bArea, frozen: !!bFrozen,
+          multiplier: L.multiplier, mode: 'attract', bonus: true, unlockAfter: id, haloD, seeds };
+        if (bInner) B.inner = bInner;
+        levels[bid0 || bcode] = B; chap.bonusLevels.push(bid0 || bcode);
+      }
+    });
+    chapters.push(chap);
+  });
+  return { levels, chapters };
+}
+
+const SOLO_BUILD = buildSoloLevels(CHAPTER_TABLE);
+/** Every solo level by id (list order: per chapter, main 1-4, bonus 1, main 5-8, bonus 2). */
+const SOLO_LEVELS = SOLO_BUILD.levels;
+/** Chapters: { id, index, name, blurb, mainLevels: [ids], bonusLevels: [ids] }. */
+const CHAPTERS = SOLO_BUILD.chapters;
+/** Main unlock chain: the 48 main levels in chapter order (bonus levels excluded). */
+const LEVEL_ORDER = CHAPTERS.flatMap((c) => c.mainLevels);
+/** Bonus levels, in chapter order. */
+const BONUS_ORDER = CHAPTERS.flatMap((c) => c.bonusLevels);
+/** The v2 list ("furthest unlocked index" k) — kept only to migrate old saves. */
+const LEGACY_V2_ORDER = ['warmup', 'easy', 'normal', 'tight', 'frozen', 'hard', 'squeeze', 'island', 'pens', 'maze'];
+
+/** The chapter object a level belongs to (null for an unknown id). */
+function chapterOf(id) { const L = SOLO_LEVELS[id]; return L ? CHAPTERS.find((c) => c.id === L.chapter) : null; }
+
+/** Display title: "2-3 · Narrow Ring", bonus "Bonus · Pull". */
+function levelTitle(id) { const L = SOLO_LEVELS[id]; return !L ? '' : L.bonus ? `Bonus · ${L.label}` : `${L.code} · ${L.label}`; }
+
+/**
+ * Progress is the SET of cleared level ids (storage lives in the shell). A main level is open iff it is
+ * startUnlocked or the level before it in LEVEL_ORDER is cleared (across chapter boundaries); a bonus level
+ * iff its unlockAfter is cleared. A level already cleared always stays open (old saves: the chain was
+ * re-ordered). cleared: Set (or anything with has()). unlockAll (Tune panel testing switch) opens every level.
  */
 function isLevelUnlocked(id, cleared, unlockAll = false) {
   const lvl = SOLO_LEVELS[id];
   if (!lvl) return false;
-  if (unlockAll) return true;
+  if (unlockAll || cleared.has(id)) return true;
   if (lvl.bonus) return cleared.has(lvl.unlockAfter);
   const i = LEVEL_ORDER.indexOf(id);
   return !!lvl.startUnlocked || (i > 0 && cleared.has(LEVEL_ORDER[i - 1]));
@@ -1222,20 +1535,43 @@ function isLevelUnlocked(id, cleared, unlockAll = false) {
 /** Levels (main chain first, then bonus) that clearing `id` newly opens, given the cleared set before it. */
 function levelsUnlockedBy(id, clearedBefore) {
   const after = new Set(clearedBefore); after.add(id);
-  return [...LEVEL_ORDER, ...BONUS_ORDER].filter((l) => !isLevelUnlocked(l, clearedBefore) && isLevelUnlocked(l, after));
+  return [...LEVEL_ORDER, ...BONUS_ORDER].filter((l) => l !== id && !isLevelUnlocked(l, clearedBefore) && isLevelUnlocked(l, after));
 }
 
-/** v2 progress ("furthest unlocked index" k) → cleared ids: every level before index k was cleared. */
+/** A chapter is open once any of its levels is. */
+function isChapterUnlocked(chId, cleared, unlockAll = false) {
+  const ch = CHAPTERS.find((c) => c.id === chId);
+  return !!ch && [...ch.mainLevels, ...ch.bonusLevels].some((id) => isLevelUnlocked(id, cleared, unlockAll));
+}
+
+/** Chapter ids that clearing `id` opens for the first time. */
+function chaptersUnlockedBy(id, clearedBefore) {
+  const after = new Set(clearedBefore); after.add(id);
+  return CHAPTERS.filter((c) => !isChapterUnlocked(c.id, clearedBefore) && isChapterUnlocked(c.id, after)).map((c) => c.id);
+}
+
+/** { main, bonus, mainTotal, bonusTotal } cleared counts for a chapter. */
+function chapterProgress(chId, cleared) {
+  const ch = CHAPTERS.find((c) => c.id === chId);
+  if (!ch) return { main: 0, bonus: 0, mainTotal: 0, bonusTotal: 0 };
+  return { main: ch.mainLevels.filter((id) => cleared.has(id)).length, bonus: ch.bonusLevels.filter((id) => cleared.has(id)).length,
+    mainTotal: ch.mainLevels.length, bonusTotal: ch.bonusLevels.length };
+}
+
+/** v2 progress ("furthest unlocked index" k into the old 10-level list) → cleared ids: every level before k. */
 function migrateV2Progress(k) {
-  const n = Number.isFinite(k) ? Math.max(0, Math.min(Math.floor(k), LEVEL_ORDER.length - 1)) : 0;
-  return LEVEL_ORDER.slice(0, n);
+  const n = Number.isFinite(k) ? Math.max(0, Math.min(Math.floor(k), LEGACY_V2_ORDER.length - 1)) : 0;
+  return LEGACY_V2_ORDER.slice(0, n);
 }
 
-/** The level after `id` in unlock order, or null after the last one. */
+/** The level after `id` in the main chain (crosses chapter boundaries), or null after the last one / for bonus levels. */
 function nextLevel(id) {
   const i = LEVEL_ORDER.indexOf(id);
   return i >= 0 && i + 1 < LEVEL_ORDER.length ? LEVEL_ORDER[i + 1] : null;
 }
+
+/* --------------------------------------------------------------- 5. GameState */
+/** Phases: 'placing' → 'simulating' → ('resolving') → 'placing' | 'gameover'. */
 
 /** Solo scoring: points per stone inside the cord at game end + bonus per tenth of a second left. */
 const SOLO_SCORING = {
@@ -1317,6 +1653,7 @@ class GameState {
     this.timeLeft = this.timeLimit;
     this.outcome = null;                                      // solo: 'cleared' | 'timeout'
     this.clockStarted = false;                                // solo: the clock waits for the first stone pick-up
+    this.paused = false;                                      // solo: clock held while the New sheet is open mid-game
     this.playerCount = playerCount;
     this.perPlayer = perPlayer;
     this.counts = new Array(playerCount).fill(perPlayer);   // stones left in each tray
@@ -1358,9 +1695,23 @@ class GameState {
     return true;
   }
 
-  /** Advance the solo clock (no-op until startClock()). Returns 'timeout' on the frame the game is lost while placing, else null. */
+  /** Solo: hold the clock (the New sheet opened mid-game). Only a running, unfinished game pauses. Returns true if it just paused. */
+  pause() {
+    if (this.mode !== 'solo' || !this.clockStarted || this.phase === 'gameover' || this.paused) return false;
+    this.paused = true;
+    return true;
+  }
+
+  /** Release a pause (sheet closed without choosing). Returns true if the game was paused. */
+  resume() {
+    if (!this.paused) return false;
+    this.paused = false;
+    return true;
+  }
+
+  /** Advance the solo clock (no-op until startClock() and while paused). Returns 'timeout' on the frame the game is lost while placing, else null. */
   tick(dt) {
-    if (this.mode !== 'solo' || !this.clockStarted || this.phase === 'gameover' || this.timeLeft <= 0) return null;
+    if (this.mode !== 'solo' || !this.clockStarted || this.paused || this.phase === 'gameover' || this.timeLeft <= 0) return null;
     this.timeLeft = Math.max(0, this.timeLeft - dt);
     if (this.timeLeft > 0) return null;
     if (this.phase === 'placing') { this.endSolo('timeout'); return 'timeout'; }
@@ -2098,13 +2449,65 @@ const Best = {
   set(diff, v) { try { localStorage.setItem(this.key(diff), String(v)); } catch (e) { /* not saved */ } },
 };
 
+/** How-to-play flags, kept in this browser only (storage may be unavailable: then the rules just show again). */
+const RulesPref = {
+  hideKey: 'stonesAttract.v3.hideRules',
+  attractKey: 'stonesAttract.v3.seenAttractRules',
+  get(key) { try { return localStorage.getItem(key) === '1'; } catch (e) { return false; } },
+  set(key) { try { localStorage.setItem(key, '1'); } catch (e) { /* not saved */ } },
+};
+
+/** Decorative inline SVGs for the how-to-play pages, drawn with theme tokens (aria-hidden container). */
+const RULES_ART = (() => {
+  const v = (name) => `var(--${name})`;
+  const stone = (x, y, r = 11, extra = '') =>
+    `<circle cx="${x + 2}" cy="${y + 3}" r="${r}" style="fill:${v('stone-shadow')}" opacity=".6"/>` +
+    `<circle cx="${x}" cy="${y}" r="${r}" fill="url(#rgStone)" ${extra}/>` +
+    `<ellipse cx="${x - r * .35}" cy="${y - r * .4}" rx="${r * .28}" ry="${r * .16}" transform="rotate(-35 ${x - r * .35} ${y - r * .4})" style="fill:${v('stone-spec')}" opacity=".8"/>`;
+  const defs = `<defs><radialGradient id="rgStone" cx="34%" cy="30%" r="75%"><stop offset="0" style="stop-color:${v('stone-hi')}"/><stop offset=".22" style="stop-color:${v('stone-mid')}"/><stop offset=".78" style="stop-color:${v('stone-dark')}"/><stop offset="1" style="stop-color:${v('stone-rim')}"/></radialGradient>` +
+    `<marker id="mkArrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" style="fill:${v('ghost-ok')}"/></marker></defs>`;
+  const felt = `<rect width="240" height="120" rx="14" style="fill:${v('felt-2')}"/>`;
+  const cord = (d, col = 'rope-1', w = 6) => `<path d="${d}" fill="none" style="stroke:${v('rope-2')}" stroke-width="${w + 2}" stroke-linecap="round"/><path d="${d}" fill="none" style="stroke:${v(col)}" stroke-width="${w}" stroke-linecap="round"/>`;
+  const svg = (body) => `<svg viewBox="0 0 240 120" role="presentation" focusable="false">${defs}${felt}${body}</svg>`;
+  return {
+    place: svg(
+      cord('M60 60 a52 44 0 1 0 104 0 a52 44 0 1 0 -104 0') +
+      stone(98, 52) + stone(132, 76) +
+      `<rect x="178" y="78" width="54" height="32" rx="8" style="fill:${v('surface')};stroke:${v('line')}"/>` + stone(196, 94, 9) + stone(214, 94, 9) +
+      `<path d="M196 82 C190 56 168 42 140 40" fill="none" style="stroke:${v('ghost-ok')}" stroke-width="2.5" stroke-dasharray="5 5" marker-end="url(#mkArrow)"/>` +
+      `<circle cx="128" cy="38" r="11" fill="none" style="stroke:${v('ghost-ok')}" stroke-width="2.5"/>`),
+    snap: svg(
+      stone(52, 60) + stone(74, 60) +
+      `<g style="stroke:${v('snap')}" stroke-width="3" stroke-linecap="round"><path d="M63 40v-9M63 80v9M49 44l-6-6M77 44l6-6M49 76l-6 6M77 76l6 6"/></g>` +
+      `<text x="63" y="108" text-anchor="middle" style="fill:${v('snap')};font:700 11px system-ui,sans-serif">SNAP!</text>` +
+      cord('M150 14 C150 40 186 46 186 60 C186 74 150 80 150 106') + stone(166, 60) +
+      `<path d="M150 60h-18" fill="none" style="stroke:${v('ghost-ok')}" stroke-width="2.5" marker-start="url(#mkArrow)"/>` +
+      cord('M214 14 C214 40 214 80 214 106', 'ice-1') +
+      `<text x="214" y="10" text-anchor="middle" style="fill:${v('ice-1')};font:700 8px system-ui,sans-serif">FROZEN</text>`),
+    clock: svg(
+      `<circle cx="80" cy="60" r="38" style="fill:${v('surface')};stroke:${v('line')}" stroke-width="3"/>` +
+      `<path d="M80 22 A38 38 0 0 1 116 72 L80 60z" style="fill:${v('accent')}" opacity=".35"/>` +
+      `<path d="M80 60V32M80 60l16 10" style="stroke:${v('ink')}" stroke-width="4" stroke-linecap="round"/><circle cx="80" cy="60" r="4" style="fill:${v('ink')}"/>` +
+      stone(160, 46) + stone(196, 46) + stone(178, 78) +
+      `<text x="178" y="112" text-anchor="middle" style="fill:${v('ghost-ok')};font:700 11px system-ui,sans-serif">+100 each</text>`),
+    attract: svg(
+      `<circle cx="96" cy="60" r="40" style="fill:${v('halo-fill')};stroke:${v('halo-edge')}" stroke-width="2.5"/>` +
+      stone(96, 60) + `<circle cx="96" cy="60" r="6" fill="none" style="stroke:${v('seed-mark')}" stroke-width="1.5"/>` +
+      stone(176, 60) +
+      `<path d="M162 60h-36" fill="none" style="stroke:${v('ghost-ok')}" stroke-width="2.5" stroke-dasharray="5 4" marker-end="url(#mkArrow)"/>` +
+      `<text x="176" y="94" text-anchor="middle" style="fill:${v('ghost-ok')};font:700 10px system-ui,sans-serif">drop here</text>`),
+  };
+})();
+
 class UI {
+  static lockSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
   constructor(app) {
     this.app = app;
     this.toastTimer = 0;
     this.buildSliders();
     this.buildSetup();
     this.bind();
+    this.bindRules();
     this.refreshConfig();
   }
 
@@ -2150,13 +2553,16 @@ class UI {
     const setup = $('#setup');
     const openSetup = (gesture = true) => {
       if (gesture !== false) app.sfx.unlock();              // audio needs a user gesture (not the page-load open)
+      app.pauseGame();                                      // solo mid-game: hold the clock while choosing
+      this.expanded = null;                                 // re-open on the chapter holding the next level
       setPanel(false); this.hideWinner(); this.renderLevels(); setup.classList.add('show');
       const cont = $('#continueBtn');
       const target = (!cont.hidden && cont) || $('#levelList .level.next') || $('#levelList .level:not(:disabled)');
       if (target) target.focus();
     };
     this.openSetup = openSetup;                              // also the start screen on page load
-    const closeSetup = () => setup.classList.remove('show');
+    // Closing without choosing resumes a paused game; choosing a level resets the game right after anyway.
+    const closeSetup = () => { setup.classList.remove('show'); app.resumeGame(); };
     $('#continueBtn').addEventListener('click', () => {
       const id = LastLevel.get();
       if (!id || !app.isUnlocked(id)) return;
@@ -2167,6 +2573,8 @@ class UI {
     $('#setupClose').addEventListener('click', closeSetup);
     setup.addEventListener('click', (e) => { if (e.target === setup) closeSetup(); });
     $('#levelList').addEventListener('click', (e) => {
+      const head = e.target.closest('.chapter-head');
+      if (head) { this.toggleChapter(head.closest('.chapter').dataset.chapter); return; }
       const b = e.target.closest('[data-level]');
       if (!b || b.disabled) return;
       closeSetup(); app.newSolo(b.dataset.level);
@@ -2287,10 +2695,9 @@ class UI {
     const g = this.app.game, cur = g.current, solo = g.mode === 'solo';
     const color = (p) => `var(--p${p + 1})`;
     $('#turnDot').style.setProperty('--pc', color(cur));
-    const lvlNow = solo ? SOLO_LEVELS[g.difficulty] : null;
-    $('#turnTitle').textContent = !solo ? `Player ${cur + 1}`
-      : lvlNow.bonus ? `Bonus · ${lvlNow.label}` : `Level ${LEVEL_ORDER.indexOf(g.difficulty) + 1} · ${lvlNow.label}`;
-    $('#turnSub').textContent = {
+    $('#turnTitle').textContent = !solo ? `Player ${cur + 1}` : levelTitle(g.difficulty);
+    $('#boardWrap').classList.toggle('paused', !!g.paused);
+    $('#turnSub').textContent = g.paused ? 'Paused' : {
       placing: solo && !g.clockStarted ? 'Clock starts when you pick up a stone'
         : g.attract ? 'Make every stone snap before time runs out' : solo ? 'Place every stone before time runs out' : 'Drag a stone from your tray',
       simulating: 'Magnets settling…',
@@ -2361,61 +2768,106 @@ class UI {
     $('#clock').setAttribute('aria-label', `${Math.ceil(g.timeLeft)} seconds left`);
   }
 
-  /** Level list in the New sheet: locked levels are disabled; the first open, uncleared main level is highlighted. Bonus group last. */
+  /**
+   * Level list in the New sheet, grouped by chapter. Each chapter header (a button with aria-expanded) shows
+   * name, blurb, progress and lock state; only expanded chapters get level rows (fast to open). The chapter
+   * holding the "next" level (first open, uncleared main level) starts expanded.
+   */
   renderLevels() {
-    const app = this.app, sc = SOLO_SCORING;
+    const app = this.app, sc = SOLO_SCORING, as = ATTRACT_SCORING;
     $('#scoreRule').textContent = `Score: ${sc.pointsPerStone} per stone inside the cord, plus ${sc.bonusPerSecond} per second left on the clock, times the level multiplier.`;
+    $('#bonusRule').textContent = `Bonus levels flip the goal: make every stone snap. Drop outside the halo; a snap scores ${as.pointsPerD} per diameter of drop distance, +${as.chainPoints} per extra stone pulled in. A miss costs ${as.missPenalty} s.`;
     const host = $('#levelList');
-    host.replaceChildren();
     const cleared = Progress.get();
     // Continue: the last solo level started, if it still exists and is open.
     const last = LastLevel.get(), cont = $('#continueBtn');
     cont.hidden = !(last && app.isUnlocked(last));
-    if (!cont.hidden) {
-      const L = SOLO_LEVELS[last];
-      cont.textContent = L.bonus ? `Continue · Bonus ${L.label}` : `Continue · Level ${LEVEL_ORDER.indexOf(last) + 1} ${L.label}`;
-    }
-    // "Next": first main-chain level that's open but not cleared (fallback: the last open one).
+    if (!cont.hidden) cont.textContent = `Continue · ${levelTitle(last)}`;
     const openMain = LEVEL_ORDER.filter((id) => app.isUnlocked(id));
-    const nextId = openMain.find((id) => !cleared.has(id)) || openMain[openMain.length - 1];
-    const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-    const lockSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
-    const button = (id, numText, isNext, ariaName) => {
-      const lvl = SOLO_LEVELS[id], open = app.isUnlocked(id), best = Best.get(id);
-      const b = mk('button', 'level' + (isNext ? ' next' : ''));
-      b.type = 'button'; b.dataset.level = id; b.disabled = !open;
-      const num = mk('span', 'num');
-      if (open) num.textContent = numText; else num.innerHTML = lockSvg;
-      const name = mk('span', 'name', lvl.label);
-      if (lvl.bonus) name.appendChild(mk('span', 'tag bonus', 'Bonus'));
-      if (lvl.areaScale < 1) name.appendChild(mk('span', 'tag', `${Math.round(lvl.areaScale * 100)}% area`));
-      if (lvl.frozen) name.appendChild(mk('span', 'tag frozen', 'Frozen cord'));
-      for (const sp of lvl.inner || []) {
-        const kind = sp.kind === 'pen' ? 'Pen' : 'Island', text = sp.frozen ? `Frozen ${kind.toLowerCase()}` : kind;
-        if (text.toLowerCase() === lvl.label.toLowerCase()) continue;   // "Island" level: the name says it already
-        name.appendChild(mk('span', sp.frozen ? 'tag frozen' : 'tag', text));
-      }
-      const seeds = lvl.seeds ? ` · ${lvl.seeds.length} seeds` : '';
-      const meta = mk('span', 'meta', `${lvl.stones} stones${seeds} · ${formatClock(lvl.timeLimit).replace(/\.0$/, '')} · ×${lvl.multiplier}`);
-      const req = lvl.bonus ? lvl.unlockAfter : LEVEL_ORDER[LEVEL_ORDER.indexOf(id) - 1];
-      const lockText = req ? `Clear ${SOLO_LEVELS[req].label} to unlock` : 'Locked';
-      const side = mk('span', 'side' + (!open ? ' lock' : ''));
-      if (!open) side.textContent = lockText;
-      else if (best != null) { side.appendChild(mk('b', null, best.toLocaleString())); side.appendChild(document.createTextNode('best')); }
-      else side.textContent = 'New';
-      b.append(num, name, meta, side);
-      b.setAttribute('aria-label', `${ariaName}: ${meta.textContent}${open ? (best != null ? `, best ${best}` : '') : ', ' + lockText.toLowerCase()}`);
-      return b;
-    };
-    LEVEL_ORDER.forEach((id, i) => host.appendChild(button(id, String(i + 1), id === nextId, `Level ${i + 1}, ${SOLO_LEVELS[id].label}`)));
-    if (BONUS_ORDER.length) {
-      host.appendChild(mk('div', 'level-group', 'Bonus'));
-      const as = ATTRACT_SCORING;
-      host.appendChild(mk('p', 'level-note', `Opposite goal: make every stone snap. Drop outside the halo; a snap scores ${as.pointsPerD} per diameter of drop distance, +${as.chainPoints} per extra stone pulled in. A miss costs ${as.missPenalty} s.`));
-      BONUS_ORDER.forEach((id, i) => host.appendChild(button(id, 'B' + (i + 1), false, `Bonus ${SOLO_LEVELS[id].label}`)));
-    }
+    this.nextId = openMain.find((id) => !cleared.has(id)) || openMain[openMain.length - 1];
+    if (!this.expanded) this.expanded = new Set([chapterOf(this.nextId).id]);
+    host.replaceChildren(...CHAPTERS.map((ch) => this.chapterSection(ch, cleared)));
     $('#bestLine').textContent = app.unlockAll ? 'All levels unlocked for testing (Tune panel).' : '';
   }
+
+  /** One chapter: header button + body (rows only when expanded). */
+  chapterSection(ch, cleared) {
+    const app = this.app, mk = UI.mk, open = isChapterUnlocked(ch.id, cleared, app.unlockAll), exp = this.expanded.has(ch.id);
+    const sec = mk('section', 'chapter' + (open ? '' : ' locked'));
+    sec.dataset.chapter = ch.id;
+    const head = mk('button', 'chapter-head');
+    head.type = 'button'; head.setAttribute('aria-expanded', String(exp)); head.setAttribute('aria-controls', 'ch-' + ch.id);
+    const title = mk('span', 'ch-title');
+    title.append(mk('small', null, `Chapter ${ch.index}`), document.createTextNode(ch.name));
+    const pr = chapterProgress(ch.id, cleared);
+    const badge = mk('span', 'ch-badge' + (pr.main === pr.mainTotal ? ' done' : ''));
+    let state;
+    if (open) { badge.textContent = `${pr.main}/${pr.mainTotal} · ${pr.bonus}/${pr.bonusTotal} bonus`; state = `${pr.main} of ${pr.mainTotal} cleared, ${pr.bonus} of ${pr.bonusTotal} bonus`; }
+    else {
+      const prev = LEVEL_ORDER[LEVEL_ORDER.indexOf(ch.mainLevels[0]) - 1];
+      state = `Clear ${SOLO_LEVELS[prev].code} to unlock`;
+      badge.classList.add('ch-lock'); badge.innerHTML = UI.lockSvg; badge.append(document.createTextNode(state));
+    }
+    const chev = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    chev.setAttribute('viewBox', '0 0 24 24'); chev.setAttribute('class', 'chev'); chev.setAttribute('aria-hidden', 'true');
+    chev.innerHTML = '<path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>';
+    head.append(title, badge, chev, mk('span', 'ch-blurb', ch.blurb));
+    head.setAttribute('aria-label', `Chapter ${ch.index}, ${ch.name}: ${state}`);
+    const body = mk('div', 'chapter-body');
+    body.id = 'ch-' + ch.id; body.hidden = !exp;
+    if (exp) this.fillChapter(body, ch);
+    sec.append(head, body);
+    return sec;
+  }
+
+  /** Expand / collapse a chapter in place (rows are built on first expand). */
+  toggleChapter(chId) {
+    const sec = $(`#levelList .chapter[data-chapter="${chId}"]`);
+    if (!sec) return;
+    const head = sec.querySelector('.chapter-head'), body = sec.querySelector('.chapter-body'), exp = head.getAttribute('aria-expanded') !== 'true';
+    if (exp) this.expanded.add(chId); else this.expanded.delete(chId);
+    head.setAttribute('aria-expanded', String(exp));
+    if (exp && !body.childElementCount) this.fillChapter(body, CHAPTERS.find((c) => c.id === chId));
+    body.hidden = !exp;
+  }
+
+  fillChapter(body, ch) {
+    for (const id of ch.mainLevels) body.appendChild(this.levelButton(id, id === this.nextId));
+    for (const id of ch.bonusLevels) body.appendChild(this.levelButton(id, false));
+  }
+
+  /** One level row: code, name + tags, stones/time/multiplier, best score or what unlocks it. */
+  levelButton(id, isNext) {
+    const app = this.app, mk = UI.mk, lvl = SOLO_LEVELS[id], open = app.isUnlocked(id), best = Best.get(id);
+    const b = mk('button', 'level' + (isNext ? ' next' : ''));
+    b.type = 'button'; b.dataset.level = id; b.disabled = !open;
+    const num = mk('span', 'num');
+    if (open) num.textContent = lvl.bonus ? 'B' + lvl.index : lvl.code; else num.innerHTML = UI.lockSvg;
+    const name = mk('span', 'name', lvl.label);
+    if (lvl.bonus) name.appendChild(mk('span', 'tag bonus', 'Bonus'));
+    if (lvl.areaScale < 1) name.appendChild(mk('span', 'tag', `${Math.round(lvl.areaScale * 100)}% area`));
+    if (lvl.frozen) name.appendChild(mk('span', 'tag frozen', 'Frozen'));
+    const tags = new Map();                               // inner cords, grouped: "Island ×2", "Frozen pen", "Eyelets"
+    for (const sp of lvl.inner || []) {
+      const kind = sp.kind === 'pen' ? 'Pen' : 'Island', text = sp.frozen ? `Frozen ${kind.toLowerCase()}` : kind;
+      tags.set(text, { n: (tags.get(text) || { n: 0 }).n + 1, frozen: sp.frozen });
+      if (sp.eyelets) tags.set('Eyelets', { n: 1, frozen: false });
+    }
+    for (const [text, t] of tags) name.appendChild(mk('span', t.frozen ? 'tag frozen' : 'tag', t.n > 1 ? `${text} ×${t.n}` : text));
+    const seeds = lvl.seeds ? ` · ${lvl.seeds.length} seeds` : '';
+    const meta = mk('span', 'meta', `${lvl.stones} stones${seeds} · ${formatClock(lvl.timeLimit).replace(/\.0$/, '')} · ×${lvl.multiplier}`);
+    const req = lvl.bonus ? lvl.unlockAfter : LEVEL_ORDER[LEVEL_ORDER.indexOf(id) - 1];
+    const lockText = req ? `Clear ${SOLO_LEVELS[req].code}` : 'Locked';
+    const side = mk('span', 'side' + (!open ? ' lock' : ''));
+    if (!open) side.textContent = lockText;
+    else if (best != null) { side.appendChild(mk('b', null, best.toLocaleString())); side.appendChild(document.createTextNode('best')); }
+    else side.textContent = 'New';
+    b.append(num, name, meta, side);
+    b.setAttribute('aria-label', `${lvl.bonus ? `Bonus ${lvl.label}` : `Level ${lvl.code}, ${lvl.label}`}: ${meta.textContent}${open ? (best != null ? `, best ${best}` : '') : `, locked: ${lockText.toLowerCase()} to unlock`}`);
+    return b;
+  }
+
+  static mk(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 
   showWinner(player) {
     $('#winnerDot').style.setProperty('--pc', `var(--p${player + 1})`);
@@ -2430,7 +2882,7 @@ class UI {
   }
 
   /** sc: soloScore() result. Builds the breakdown with DOM nodes (no innerHTML from data). */
-  showSoloResult(outcome, sc, isBest, prevBest, left, unlockedNow = null) {
+  showSoloResult(outcome, sc, isBest, prevBest, left, unlockedNow = null, chaptersNow = null) {
     $('#winnerDot').style.setProperty('--pc', outcome === 'cleared' ? 'var(--p1)' : 'var(--warn)');
     if (outcome === 'cleared') {
       $('#winnerText').textContent = 'Cleared!';
@@ -2473,11 +2925,15 @@ class UI {
       ? (prevBest == null ? 'First best score on this level.' : `New best! Previous: ${n(prevBest)}.`)
       : (prevBest == null ? 'No best score on this level yet.' : `Best on this level: ${n(prevBest)}.`);
     box.appendChild(note);
+    for (const chId of chaptersNow || []) {              // a whole new chapter opened
+      const ch = CHAPTERS.find((c) => c.id === chId), u = document.createElement('span');
+      u.className = 'note'; u.textContent = `Chapter ${ch.index} · ${ch.name} unlocked`;
+      box.appendChild(u);
+    }
     if (unlockedNow && unlockedNow.length) {             // every level this clear opened (main and bonus)
       const u = document.createElement('span');
       u.className = 'note';
-      u.textContent = 'Unlocked: ' + unlockedNow.map((id) => SOLO_LEVELS[id].bonus
-        ? `Bonus · ${SOLO_LEVELS[id].label}` : `Level ${LEVEL_ORDER.indexOf(id) + 1} · ${SOLO_LEVELS[id].label}`).join(', ');
+      u.textContent = 'Unlocked: ' + unlockedNow.map(levelTitle).join(', ');
       box.appendChild(u);
     }
     box.hidden = false;
@@ -2485,12 +2941,81 @@ class UI {
     const nxt = nextLevel(this.app.game.difficulty);
     const showNext = outcome === 'cleared' && !!nxt && !SOLO_LEVELS[this.app.game.difficulty].bonus && this.app.isUnlocked(nxt);
     $('#nextLevel').hidden = !showNext;
-    if (showNext) $('#nextLevel').textContent = `Next: ${SOLO_LEVELS[nxt].label}`;
+    if (showNext) $('#nextLevel').textContent = `Next: ${levelTitle(nxt)}`;
     $('#playAgain').classList.toggle('primary', !showNext);
     $('#playAgain').textContent = outcome === 'cleared' ? 'Replay level' : 'Try again';
     $('#winner').classList.add('show');
     (showNext ? $('#nextLevel') : $('#playAgain')).focus();
   }
+  /* ---- How to play: 3-page overlay before the level list (and from the "?" button); 1-page attract variant ---- */
+  bindRules() {
+    const ov = $('#rules');
+    $('#helpBtn').addEventListener('click', () => { this.app.sfx.unlock(); this.openRules('main'); });
+    $('#rulesSkip').addEventListener('click', () => this.closeRules());
+    $('#rulesBack').addEventListener('click', () => { if (this.rules.page > 0) { this.rules.page--; this.renderRulesPage(); } });
+    $('#rulesNext').addEventListener('click', () => {
+      if (this.rules.page < this.rules.pages.length - 1) { this.rules.page++; this.renderRulesPage(); } else this.closeRules();
+    });
+    ov.addEventListener('keydown', (e) => {
+      if (!this.rules) return;
+      if (e.key === 'Escape') { e.preventDefault(); this.closeRules(); return; }
+      if (e.key !== 'Tab') return;                          // keep Tab inside the dialog
+      const f = [...ov.querySelectorAll('button, input')].filter((el) => !el.disabled && el.offsetParent !== null);
+      if (!f.length) return;
+      const i = f.indexOf(document.activeElement);
+      if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
+      else if (!e.shiftKey && (i === f.length - 1 || i < 0)) { e.preventDefault(); f[0].focus(); }
+    });
+  }
+
+  get rulesOpen() { return !!this.rules; }
+
+  /** kind 'main' (3 pages) or 'attract' (1 page). onClose runs after it closes (Skip, Escape or the last button). */
+  openRules(kind = 'main', onClose = null) {
+    if (this.rules) return;
+    const sc = SOLO_SCORING, as = ATTRACT_SCORING;
+    const pages = kind === 'attract' ? [
+      { title: 'Bonus: make them snap', art: 'attract', text: `Drop outside the red halo so the magnets pull your stone in. A snap scores ${as.pointsPerD} × the drop distance in stone-widths, +${as.chainPoints} for every extra stone pulled in. A miss costs ${as.missPenalty} seconds and the stone stays.` },
+    ] : [
+      { title: 'Place', art: 'place', text: 'Drag a stone from your tray and drop it inside the cord.' },
+      { title: 'Don’t let them snap', art: 'snap', text: 'Magnets pull. If stones snap together, they all go back to your tray. Slide a stone outward to stretch the cord and make room — frozen (icy blue) cords won’t move.' },
+      { title: 'Beat the clock', art: 'clock', text: `In solo levels, place every stone before time runs out. The clock starts when you pick up your first stone. Score = ${sc.pointsPerStone} per stone in the cord + ${sc.bonusPerSecond} per second left, × the level multiplier.` },
+    ];
+    this.rules = { kind, pages, page: 0, onClose, paused: this.app.pauseGame(), returnFocus: document.activeElement };
+    if (this.app.input) this.app.input.end();
+    $('#rulesHide').checked = false;
+    this.renderRulesPage();
+    $('#rules').classList.add('show');
+    $('#rulesNext').focus();
+  }
+
+  renderRulesPage() {
+    const r = this.rules, pg = r.pages[r.page], last = r.page === r.pages.length - 1, multi = r.pages.length > 1;
+    $('#rulesTitle').textContent = pg.title;
+    $('#rulesText').textContent = pg.text;
+    $('#rulesArt').innerHTML = RULES_ART[pg.art];
+    const body = $('#rulesBody');                           // replay the page-in animation (none with reduced motion)
+    body.classList.remove('rules-page'); void body.offsetWidth; body.classList.add('rules-page');
+    const dots = $('#rulesDots');
+    dots.hidden = !multi;
+    dots.replaceChildren(...r.pages.map((_, i) => { const d = document.createElement('span'); if (i === r.page) d.className = 'on'; return d; }));
+    dots.setAttribute('aria-label', `Page ${r.page + 1} of ${r.pages.length}`);
+    $('#rulesBack').hidden = !multi; $('#rulesBack').disabled = r.page === 0;
+    $('#rulesNext').textContent = !last ? 'Next' : r.kind === 'attract' ? 'Got it' : 'Let’s play';
+    $('#rulesHideRow').hidden = !(last && r.kind === 'main');
+  }
+
+  closeRules() {
+    const r = this.rules;
+    if (!r) return;
+    if (r.kind === 'main' && $('#rulesHide').checked) RulesPref.set(RulesPref.hideKey);   // honoured on Skip too
+    this.rules = null;
+    $('#rules').classList.remove('show');
+    if (r.paused) this.app.resumeGame();
+    if (r.onClose) r.onClose();
+    else if (r.returnFocus && r.returnFocus.focus && document.contains(r.returnFocus)) r.returnFocus.focus();
+  }
+
   hideWinner() { $('#winner').classList.remove('show'); }
 }
 
@@ -2534,7 +3059,9 @@ class App {
     new MutationObserver(onTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
     this.ui.render();
-    this.ui.openSetup(false);                        // the level list is the start screen
+    // Start screen: how-to-play first (unless hidden for good), then the level list.
+    if (RulesPref.get(RulesPref.hideKey)) this.ui.openSetup(false);
+    else this.ui.openRules('main', () => this.ui.openSetup(false));
     requestAnimationFrame((t) => this.frame(t));
   }
 
@@ -2551,7 +3078,12 @@ class App {
     this.drag = this.game.dragTo(t.x, t.y, t.onBoard);
   }
 
-  canStartDrag() { return this.game.phase === 'placing' && this.game.counts[this.game.current] > 0; }
+  canStartDrag() { return this.game.phase === 'placing' && !this.game.paused && !this.ui.rulesOpen && this.game.counts[this.game.current] > 0; }
+
+  /** New sheet opened: a running solo / attract game holds its clock (and its settling stones); the board dims. */
+  pauseGame() { if (!this.game.pause()) return false; if (this.input) this.input.end(); this.ui.render(); return true; }
+  /** Sheet closed without choosing: carry on where the game was. */
+  resumeGame() { if (this.game.resume()) this.ui.render(); }
 
   tryPlace(x, y) {
     const st = this.game.placeStone(x, y);
@@ -2563,13 +3095,18 @@ class App {
   }
 
   isUnlocked(id) { return isLevelUnlocked(id, Progress.get(), this.unlockAll); }
+  /** Open by real progress (ignoring unlock-all). Only such levels save a clear, best or Continue target: with
+   *  "cleared stays open", a clear recorded through unlock-all would otherwise open later levels for good. */
+  isEarned(id) { return isLevelUnlocked(id, Progress.get()); }
 
   newSolo(id) {
     if (!SOLO_LEVELS[id]) id = LEVEL_ORDER[0];
     const lvl = SOLO_LEVELS[id];
-    LastLevel.set(id);
+    if (this.isEarned(id)) LastLevel.set(id);         // unlock-all (testing) writes nothing
     this.newGame(1, lvl.stones, { timeLimit: lvl.timeLimit, difficulty: id, areaScale: lvl.areaScale, frozen: lvl.frozen, inner: lvl.inner,
       attract: lvl.mode === 'attract', seeds: lvl.seeds, haloD: lvl.haloD });
+    // First attract level ever: explain the flipped goal before play (the clock waits for the first pick-up anyway).
+    if (lvl.mode === 'attract' && !RulesPref.get(RulesPref.attractKey)) { RulesPref.set(RulesPref.attractKey); this.ui.openRules('attract'); }
   }
 
   newGame(players, perPlayer, opts = {}) {
@@ -2587,7 +3124,7 @@ class App {
     this.last = t;
     const g = this.game, dt = this.cfg.fixedDt;
 
-    if (g.phase === 'simulating') {
+    if (g.phase === 'simulating' && !g.paused) {
       this.acc += dtReal;
       let steps = 0;
       while (this.acc >= dt && steps < 16) { this.physics.step(dt); this.acc -= dt; steps++; }
@@ -2629,7 +3166,12 @@ class App {
     this.highlight = new Set(shown.flat());
     this.ui.render();
     const gen = this.gen;
-    this.resolveTimer = setTimeout(() => { if (gen === this.gen) this.finishTurn(clusters); }, 700);   // let the player see what snapped
+    const fire = () => {                              // a paused game waits here until the sheet closes
+      if (gen !== this.gen) return;
+      if (this.game.paused) { this.resolveTimer = setTimeout(fire, 100); return; }
+      this.finishTurn(clusters);
+    };
+    this.resolveTimer = setTimeout(fire, 700);        // let the player see what snapped
   }
 
   finishTurn(clusters) {
@@ -2649,18 +3191,18 @@ class App {
   }
 
   showSoloEnd() {
-    const g = this.game, sc = g.score();
+    const g = this.game, sc = g.score(), earned = this.isEarned(g.difficulty);
     const prev = Best.get(g.difficulty);
-    const isBest = sc.total > 0 && (prev == null || sc.total > prev);   // a zero never becomes a best
+    const isBest = earned && sc.total > 0 && (prev == null || sc.total > prev);   // a zero never becomes a best
     if (isBest) Best.set(g.difficulty, sc.total);
     // Clearing a level adds it to the cleared set (saved in this browser); note whatever that opens.
-    let unlockedNow = null;
-    if (g.outcome === 'cleared') {
+    let unlockedNow = null, chaptersNow = null;
+    if (g.outcome === 'cleared' && earned) {
       const before = new Set(Progress.get());
-      if (Progress.clear(g.difficulty)) unlockedNow = levelsUnlockedBy(g.difficulty, before);
+      if (Progress.clear(g.difficulty)) { unlockedNow = levelsUnlockedBy(g.difficulty, before); chaptersNow = chaptersUnlockedBy(g.difficulty, before); }
     }
     this.ui.render();                                 // clock row switches to the final total
-    this.ui.showSoloResult(g.outcome, sc, isBest, prev, g.counts[0], unlockedNow);
+    this.ui.showSoloResult(g.outcome, sc, isBest, prev, g.counts[0], unlockedNow, chaptersNow);
   }
 }
 
