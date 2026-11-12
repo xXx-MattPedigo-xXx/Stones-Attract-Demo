@@ -26,6 +26,7 @@
     --line: #d3c9b7;
     --accent: #2f6b4f;
     --accent-ink: #ffffff;
+    --warn: #b4471f;
     --shadow: 0 10px 30px rgba(40, 30, 10, .18);
 
     --felt-1: #4a8566;
@@ -67,6 +68,7 @@
       --line: #343935;
       --accent: #7cc39c;
       --accent-ink: #0f1a14;
+      --warn: #ff9f6e;
       --shadow: 0 10px 30px rgba(0, 0, 0, .5);
       --felt-1: #2a5a43;
       --felt-2: #1a3d2c;
@@ -95,6 +97,7 @@
     --line: #343935;
     --accent: #7cc39c;
     --accent-ink: #0f1a14;
+    --warn: #ff9f6e;
     --shadow: 0 10px 30px rgba(0, 0, 0, .5);
     --felt-1: #2a5a43;
     --felt-2: #1a3d2c;
@@ -228,6 +231,32 @@
   .card { background: var(--surface); border-radius: 20px; padding: 24px; text-align: center; box-shadow: var(--shadow); max-width: 320px; width: 100%; }
   .card h2 { font-size: 1.6rem; display: flex; align-items: center; justify-content: center; gap: 10px; }
   .card p { color: var(--ink-soft); margin: 8px 0 18px; }
+  .btn-col { display: flex; flex-direction: column; gap: 8px; }
+  .btn.ghost { background: transparent; }
+
+  /* ---------- New-game sheet ---------- */
+  .setup-card { text-align: left; max-width: 400px; max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+  .setup-card h2 { justify-content: flex-start; font-size: 1.4rem; }
+  .mode-block { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: var(--surface-2); }
+  .mode-block h3 { font-size: 1rem; }
+  .mode-block p { margin: 0; font-size: .85rem; }
+  .diff-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .btn.diff { height: auto; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 1px; background: var(--surface); }
+  .btn.diff.primary { background: var(--accent); }
+  .btn.diff small { font-weight: 500; font-size: .75rem; opacity: .8; font-variant-numeric: tabular-nums; }
+  .best { color: var(--ink-soft); font-size: .8rem; min-height: 1.2em; }
+
+  /* ---------- Solo clock ---------- */
+  .clock {
+    display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 2px 10px; padding: 6px 12px 8px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--line);
+  }
+  .clock-label { font-size: .8rem; color: var(--ink-soft); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
+  .clock-time { justify-self: end; font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+  .clock-bar { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+  .clock-bar span { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; }
+  .clock.low .clock-bar span { background: var(--warn); }
+  .clock.low .clock-time { color: var(--warn); }
 
   @media (prefers-reduced-motion: reduce) {
     .toast, .panel { transition: none; }
@@ -244,6 +273,7 @@
       <p id="turnSub">Drag a stone from your tray</p>
     </div>
     <div class="actions">
+      <button class="icon-btn" id="gameBtn" aria-controls="setup">New</button>
       <button class="icon-btn" id="muteBtn" aria-label="Mute sound" aria-pressed="false"></button>
       <button class="icon-btn" id="tuneBtn" aria-controls="panel" aria-expanded="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
@@ -253,6 +283,11 @@
   </header>
 
   <div class="scores" id="scores"></div>
+  <div class="clock" id="clock" hidden>
+    <span class="clock-label" id="clockLabel">Time left</span>
+    <span class="clock-time" id="clockTime" role="timer" aria-live="off">1:30.0</span>
+    <span class="clock-bar"><span id="clockFill"></span></span>
+  </div>
 
   <main class="board-wrap" id="boardWrap">
     <canvas id="board" aria-label="Stones Attract board"></canvas>
@@ -278,20 +313,42 @@
       <button class="btn primary" id="copyCfg">Copy config (C#)</button>
     </div>
     <textarea id="copyFallback" hidden readonly aria-label="Config to copy"></textarea>
-    <h3>Game</h3>
-    <div class="setup">
-      <label>Players <select id="selPlayers"></select></label>
-      <label>Stones each <select id="selStones"></select></label>
-      <button class="btn" id="newGame" style="flex:1 1 120px">New game</button>
-    </div>
   </div>
 </aside>
+
+<div class="overlay" id="setup" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
+  <div class="card setup-card">
+    <h2 id="setupTitle">New game</h2>
+    <section class="mode-block">
+      <h3>Solo · timed</h3>
+      <p>Place all 12 stones before the clock runs out. Snapped stones go back to your tray, and the clock keeps running.</p>
+      <div class="diff-row">
+        <button class="btn diff" id="soloEasy" data-diff="easy">Easy<small>2:00</small></button>
+        <button class="btn diff primary" id="soloNormal" data-diff="normal">Normal<small>1:30</small></button>
+        <button class="btn diff" id="soloHard" data-diff="hard">Hard<small>1:00</small></button>
+      </div>
+      <p class="best" id="bestLine"></p>
+    </section>
+    <section class="mode-block">
+      <h3>Pass &amp; play</h3>
+      <div class="setup">
+        <label>Players <select id="selPlayers"></select></label>
+        <label>Stones each <select id="selStones"></select></label>
+        <button class="btn" id="newGame" style="flex:1 1 100%">Start</button>
+      </div>
+    </section>
+    <button class="btn ghost" id="setupClose">Cancel</button>
+  </div>
+</div>
 
 <div class="overlay" id="winner" role="dialog" aria-modal="true" aria-labelledby="winnerTitle">
   <div class="card">
     <h2 id="winnerTitle"><span class="dot" id="winnerDot"></span><span id="winnerText">Player 1 wins!</span></h2>
-    <p>All stones placed. Nicely done.</p>
-    <button class="btn primary" id="playAgain" style="width:100%">Play again</button>
+    <p id="winnerMsg">All stones placed. Nicely done.</p>
+    <div class="btn-col">
+      <button class="btn primary" id="playAgain">Play again</button>
+      <button class="btn" id="changeMode">Change mode</button>
+    </div>
   </div>
 </div>
 
@@ -810,13 +867,39 @@ class Physics {
 
 /* --------------------------------------------------------------- 5. GameState */
 /** Phases: 'placing' → 'simulating' → ('resolving') → 'placing' | 'gameover'. */
+/** Solo timed difficulty levels (seconds for 12 stones). */
+const SOLO_LEVELS = {
+  easy:   { label: 'Easy',   timeLimit: 120, stones: 12 },
+  normal: { label: 'Normal', timeLimit: 90,  stones: 12 },
+  hard:   { label: 'Hard',   timeLimit: 60,  stones: 12 },
+};
+
+/** m:ss.t, e.g. 83.42 -> "1:23.4". Rounds DOWN so 0.04 s left never shows as 0.1. */
+function formatClock(sec) {
+  const t = Math.max(0, Math.floor(sec * 10)) / 10;
+  const m = Math.floor(t / 60), s = t - m * 60;
+  return `${m}:${s.toFixed(1).padStart(4, '0')}`;
+}
+
 class GameState {
   constructor(cfg) { this.cfg = cfg; this.rope = new Rope(cfg); this.reset(2, 12); }
 
-  reset(playerCount, perPlayer) {
+  /**
+   * opts.timeLimit (seconds) switches to SOLO TIMED mode: one player, clock runs during placing,
+   * settling and the snap pause. Snapped stones return to the tray. Win = tray empty after a clean
+   * settle. Clock hitting 0 while placing = timeout; while a stone is still settling, that stone's
+   * result decides (empty tray -> win with 0 s left, otherwise timeout).
+   */
+  reset(playerCount, perPlayer, opts = {}) {
     this.rope.reset();                                        // cord persists across turns, not games
     this.drag = null;
     this.ropeSnap = null;                                     // a drag in progress must not restore an old-game cord
+    this.mode = opts.timeLimit > 0 ? 'solo' : 'versus';
+    this.difficulty = opts.difficulty || null;
+    if (this.mode === 'solo') playerCount = 1;
+    this.timeLimit = this.mode === 'solo' ? opts.timeLimit : 0;
+    this.timeLeft = this.timeLimit;
+    this.outcome = null;                                      // solo: 'cleared' | 'timeout'
     this.playerCount = playerCount;
     this.perPlayer = perPlayer;
     this.counts = new Array(playerCount).fill(perPlayer);   // stones left in each tray
@@ -826,6 +909,21 @@ class GameState {
     this.winner = -1;
     this.turn = 1;
     this.nextId = 1;
+  }
+
+  /** Advance the solo clock. Returns 'timeout' on the frame the game is lost while placing, else null. */
+  tick(dt) {
+    if (this.mode !== 'solo' || this.phase === 'gameover' || this.timeLeft <= 0) return null;
+    this.timeLeft = Math.max(0, this.timeLeft - dt);
+    if (this.timeLeft > 0) return null;
+    if (this.phase === 'placing') { this.endSolo('timeout'); return 'timeout'; }
+    return null;                                              // settling / snap pause: resolveTurn decides
+  }
+
+  endSolo(outcome) {
+    this.outcome = outcome;
+    this.phase = 'gameover';
+    this.winner = outcome === 'cleared' ? 0 : -1;
   }
 
   /** Returns null if OK, else 'outside' | 'overlap'. */
@@ -926,7 +1024,14 @@ class GameState {
     for (const st of this.stones) { st.vx = 0; st.vy = 0; }
     const player = this.current, taken = before - this.stones.length;
     this.counts[player] += taken;
-    const result = { player, taken, winner: -1 };
+    const result = { player, taken, winner: -1, outcome: null };
+    if (this.mode === 'solo') {
+      if (this.counts[0] === 0) { this.endSolo('cleared'); result.winner = 0; }
+      else if (this.timeLeft <= 0) this.endSolo('timeout');
+      else { this.phase = 'placing'; this.turn++; }
+      result.outcome = this.outcome;
+      return result;
+    }
     if (this.counts[player] === 0) {
       this.phase = 'gameover';
       this.winner = player;
@@ -1296,6 +1401,16 @@ const TUNABLES = [
     help: 'How much a sliding stone dents the cord. 0 = rigid wall, 1 = cord yields fully.' },
 ];
 
+/** Best solo time-left per difficulty, kept in this browser only. Storage may be unavailable. */
+const Best = {
+  key: (diff) => `stonesAttract.best.${diff}`,
+  get(diff) {
+    try { const v = parseFloat(localStorage.getItem(this.key(diff))); return Number.isFinite(v) ? v : null; }
+    catch (e) { return null; }
+  },
+  set(diff, v) { try { localStorage.setItem(this.key(diff), String(v)); } catch (e) { /* not saved */ } },
+};
+
 class UI {
   constructor(app) {
     this.app = app;
@@ -1343,11 +1458,26 @@ class UI {
     $('#resetCfg').addEventListener('click', () => { app.cfg.reset(); this.refreshConfig(); this.toast('Defaults restored'); });
     $('#copyCfg').addEventListener('click', () => this.copyConfig());
     $('#debugToggle').addEventListener('change', (e) => { app.showRanges = e.target.checked; });
+    // New-game sheet
+    const setup = $('#setup');
+    const openSetup = () => { app.sfx.unlock(); setPanel(false); this.hideWinner(); this.renderBest(); setup.classList.add('show'); $('#soloNormal').focus(); };
+    const closeSetup = () => setup.classList.remove('show');
+    $('#gameBtn').addEventListener('click', openSetup);
+    $('#changeMode').addEventListener('click', openSetup);
+    $('#setupClose').addEventListener('click', closeSetup);
+    setup.addEventListener('click', (e) => { if (e.target === setup) closeSetup(); });
+    for (const b of setup.querySelectorAll('[data-diff]')) {
+      b.addEventListener('click', () => { closeSetup(); app.newSolo(b.dataset.diff); });
+    }
     $('#newGame').addEventListener('click', () => {
+      closeSetup();
       app.newGame(parseInt($('#selPlayers').value, 10), parseInt($('#selStones').value, 10));
-      setPanel(false);
     });
-    $('#playAgain').addEventListener('click', () => app.newGame(app.game.playerCount, app.game.perPlayer));
+    $('#playAgain').addEventListener('click', () => {
+      const g = app.game;
+      if (g.mode === 'solo') app.newSolo(g.difficulty);
+      else app.newGame(g.playerCount, g.perPlayer);
+    });
     const mute = $('#muteBtn');
     mute.addEventListener('click', () => {
       app.sfx.unlock();
@@ -1448,19 +1578,24 @@ class UI {
 
   /** Redraw top bar, scores and tray from GameState. */
   render() {
-    const g = this.app.game, cur = g.current;
+    const g = this.app.game, cur = g.current, solo = g.mode === 'solo';
     const color = (p) => `var(--p${p + 1})`;
     $('#turnDot').style.setProperty('--pc', color(cur));
-    $('#turnTitle').textContent = `Player ${cur + 1}`;
+    $('#turnTitle').textContent = solo ? `Solo · ${SOLO_LEVELS[g.difficulty].label}` : `Player ${cur + 1}`;
     $('#turnSub').textContent = {
-      placing: 'Drag a stone from your tray',
+      placing: solo ? 'Place every stone before time runs out' : 'Drag a stone from your tray',
       simulating: 'Magnets settling…',
       resolving: 'Snap!',
       gameover: 'Game over',
     }[g.phase];
 
+    $('#clock').hidden = !solo;
+    this.lastClockText = null;
+    if (solo) this.renderClock();
+
     const scores = $('#scores');
     scores.innerHTML = '';
+    scores.hidden = solo;                                  // the tray already shows the solo count
     for (let p = 0; p < g.playerCount; p++) {
       const el = document.createElement('div');
       el.className = 'score' + (p === cur ? ' active' : '');
@@ -1473,7 +1608,7 @@ class UI {
     const tray = $('#tray');
     tray.style.setProperty('--pc', color(cur));
     $('#trayDot').style.setProperty('--pc', color(cur));
-    $('#trayLabel').textContent = `Player ${cur + 1}'s tray`;
+    $('#trayLabel').textContent = solo ? 'Your tray' : `Player ${cur + 1}'s tray`;
     const n = g.counts[cur];
     $('#trayCount').textContent = `${n} left`;
     tray.classList.toggle('disabled', g.phase !== 'placing');
@@ -1492,9 +1627,45 @@ class UI {
     }
   }
 
+  /** Solo clock: cheap per-frame update, only touches the DOM when the shown tenth changes. */
+  renderClock() {
+    const g = this.app.game;
+    if (g.mode !== 'solo') return;
+    const text = formatClock(g.timeLeft);
+    if (text === this.lastClockText) return;
+    this.lastClockText = text;
+    $('#clockTime').textContent = text;
+    $('#clockFill').style.transform = `scaleX(${g.timeLimit ? g.timeLeft / g.timeLimit : 0})`;
+    $('#clock').classList.toggle('low', g.timeLeft <= 10);
+    $('#clock').setAttribute('aria-label', `${Math.ceil(g.timeLeft)} seconds left`);
+  }
+
+  renderBest() {
+    const parts = Object.keys(SOLO_LEVELS).map(k => {
+      const b = Best.get(k);
+      return b == null ? null : `${SOLO_LEVELS[k].label} ${formatClock(b)}`;
+    }).filter(Boolean);
+    $('#bestLine').textContent = parts.length ? `Best time left: ${parts.join(' · ')}` : 'No solo wins yet.';
+  }
+
   showWinner(player) {
     $('#winnerDot').style.setProperty('--pc', `var(--p${player + 1})`);
     $('#winnerText').textContent = `Player ${player + 1} wins!`;
+    $('#winnerMsg').textContent = 'All stones placed. Nicely done.';
+    $('#winner').classList.add('show');
+    $('#playAgain').focus();
+  }
+
+  showSoloResult(outcome, timeLeft, isBest, prevBest, left) {
+    $('#winnerDot').style.setProperty('--pc', outcome === 'cleared' ? 'var(--p1)' : 'var(--warn)');
+    if (outcome === 'cleared') {
+      $('#winnerText').textContent = 'Cleared!';
+      $('#winnerMsg').textContent = `All stones placed with ${formatClock(timeLeft)} to spare.` +
+        (isBest ? (prevBest == null ? ' First win on this level.' : ` New best (was ${formatClock(prevBest)}).`) : ` Best: ${formatClock(prevBest)}.`);
+    } else {
+      $('#winnerText').textContent = 'Time’s up';
+      $('#winnerMsg').textContent = `${left} stone${left === 1 ? '' : 's'} still in your tray.`;
+    }
     $('#winner').classList.add('show');
     $('#playAgain').focus();
   }
@@ -1563,10 +1734,15 @@ class App {
     return true;
   }
 
-  newGame(players, perPlayer) {
+  newSolo(diff) {
+    const lvl = SOLO_LEVELS[diff] || SOLO_LEVELS.normal;
+    this.newGame(1, lvl.stones, { timeLimit: lvl.timeLimit, difficulty: SOLO_LEVELS[diff] ? diff : 'normal' });
+  }
+
+  newGame(players, perPlayer, opts = {}) {
     this.gen++;                                    // invalidates a pending resolve timer
     clearTimeout(this.resolveTimer);
-    this.game.reset(players, perPlayer);
+    this.game.reset(players, perPlayer, opts);
     this.highlight = null;
     if (this.input) this.input.end(); else this.endDrag();
     this.ui.hideWinner();
@@ -1584,6 +1760,15 @@ class App {
       while (this.acc >= dt && steps < 16) { this.physics.step(dt); this.acc -= dt; steps++; }
       if (steps >= 16) this.acc = 0;            // don't spiral after a stall
       if (this.physics.isSettled()) this.endSimulation();
+    }
+
+    if (g.mode === 'solo' && g.phase !== 'gameover') {
+      if (g.tick(dtReal) === 'timeout') {
+        this.input.end();                         // drop any stone in hand; cord restores
+        this.ui.render();
+        this.ui.toast('Time’s up', 'snap');
+        this.showSoloEnd();
+      } else this.ui.renderClock();
     }
 
     if (this.dragTarget && g.drag) this.stepDrag();   // ghost catches up after a fast flick
@@ -1612,10 +1797,22 @@ class App {
   finishTurn(clusters) {
     const res = this.game.resolveTurn(clusters);
     this.highlight = null;
-    if (res.taken > 0) this.ui.toast(`Snap! Player ${res.player + 1} takes ${res.taken} stone${res.taken === 1 ? '' : 's'}`, 'snap');
+    const s = res.taken === 1 ? '' : 's';
+    if (res.taken > 0) this.ui.toast(this.game.mode === 'solo'
+      ? `Snap! ${res.taken} stone${s} back to your tray`
+      : `Snap! Player ${res.player + 1} takes ${res.taken} stone${s}`, 'snap');
     else this.ui.toast('Clean placement');
     this.ui.render();
-    if (res.winner >= 0) this.ui.showWinner(res.winner);
+    if (this.game.mode === 'solo') { if (res.outcome) this.showSoloEnd(); }
+    else if (res.winner >= 0) this.ui.showWinner(res.winner);
+  }
+
+  showSoloEnd() {
+    const g = this.game;
+    let isBest = false;
+    const prev = Best.get(g.difficulty);
+    if (g.outcome === 'cleared' && (prev == null || g.timeLeft > prev)) { Best.set(g.difficulty, g.timeLeft); isBest = true; }
+    this.ui.showSoloResult(g.outcome, g.timeLeft, isBest, prev, g.counts[0]);
   }
 }
 
