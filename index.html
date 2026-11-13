@@ -181,6 +181,8 @@
     .turn h1 { font-size: 1.15rem; }
   }
 
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .scores[hidden] { display: none; }
   .scores { display: flex; gap: 6px; flex-wrap: wrap; }
   .score {
     flex: 1 1 0; min-width: 70px; display: flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 12px;
@@ -342,15 +344,18 @@
 
   /* ---------- Solo clock ---------- */
   .clock {
-    display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 2px 10px; padding: 6px 12px 8px; border-radius: 12px;
+    display: grid; grid-template-columns: auto 1fr auto auto; align-items: baseline; gap: 2px 8px; padding: 6px 12px 8px; border-radius: 12px;
     background: var(--surface); border: 1px solid var(--line);
   }
   .clock-label { font-size: .8rem; color: var(--ink-soft); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
-  .clock-time { justify-self: end; font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+  .clock-time { grid-column: 2 / -1; justify-self: end; font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 1.35rem; font-variant-numeric: tabular-nums; }
   .clock-bar { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
   .clock-bar span { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; }
   .clock-score { justify-self: end; font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 1rem; font-variant-numeric: tabular-nums; }
   .clock-bar + .clock-label { margin-top: 4px; }
+  .clock-total { justify-self: end; min-width: 4.2em; text-align: right; font-family: "Space Grotesk", sans-serif; font-weight: 600; font-size: .85rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .clock[hidden] { display: none; }
+  .total-score { margin: 6px 0 10px; font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
   .breakdown { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; text-align: left; margin: 10px 0 18px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: .9rem; }
   .breakdown span:nth-child(even) { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
   .breakdown .total { font-family: "Space Grotesk", sans-serif; font-size: 1.15rem; font-weight: 700; padding-top: 6px; border-top: 1px solid var(--line); }
@@ -391,6 +396,8 @@
     <span class="clock-bar"><span id="clockFill"></span></span>
     <span class="clock-label">Score</span>
     <span class="clock-score" id="clockScore">0</span>
+    <span class="clock-label">Total<span class="sr-only"> score, sum of your saved best scores</span></span>
+    <span class="clock-total" id="clockTotal">0</span>
   </div>
 
   <main class="board-wrap" id="boardWrap">
@@ -427,6 +434,7 @@
     <button class="btn primary" id="continueBtn" hidden></button>
     <section class="mode-block">
       <h3>Solo · timed</h3>
+      <p class="total-score" id="totalScore" aria-live="polite"></p>
       <p>Place every stone before the clock runs out. Snapped stones go back to your tray, and the clock keeps running. Clear a level to unlock the next.</p>
       <p id="scoreRule"></p>
       <p id="bonusRule"></p>
@@ -1589,6 +1597,13 @@ function soloScore(stonesOnBoard, timeLeft, multiplier = 1, scoring = SOLO_SCORI
   return { stones: stonesOnBoard, stonePts, tenths, timeBonus, subtotal, multiplier, total: Math.round(subtotal * multiplier) };
 }
 
+/** Career total: the sum of the saved best score of every solo level. Missing or invalid bests count as 0. */
+function totalScore(getBest, ids = Object.keys(SOLO_LEVELS)) {
+  let sum = 0;
+  for (const id of ids) { const v = Number(getBest(id)); if (Number.isFinite(v)) sum += v; }
+  return Math.round(sum);
+}
+
 /**
  * Attract scoring. Each HIT (the placed stone ends the turn in a cluster) scores
  *   distance points = round(pointsPerD × d), d = drop distance (placed center → nearest other stone, in diameters)
@@ -2440,6 +2455,8 @@ const LastLevel = {
   set(id) { try { localStorage.setItem(this.key, id); } catch (e) { /* not saved */ } },
 };
 
+const careerTotal = () => totalScore((id) => Best.get(id));
+
 const Best = {
   key: (diff) => `stonesAttract.v2.best.${diff}`,
   get(diff) {
@@ -2712,6 +2729,7 @@ class UI {
       const sc = g.score();
       // During play: stone points with the level multiplier (time bonus is added at the end).
       // Attract: hit + chain points with the multiplier.
+      $('#clockTotal').textContent = careerTotal().toLocaleString();
       $('#clockScore').textContent = (g.phase === 'gameover' ? sc.total : sc.attract ? sc.running : Math.round(sc.stonePts * sc.multiplier)).toLocaleString();
     }
 
@@ -2777,6 +2795,7 @@ class UI {
     const app = this.app, sc = SOLO_SCORING, as = ATTRACT_SCORING;
     $('#scoreRule').textContent = `Score: ${sc.pointsPerStone} per stone inside the cord, plus ${sc.bonusPerSecond} per second left on the clock, times the level multiplier.`;
     $('#bonusRule').textContent = `Bonus levels flip the goal: make every stone snap. Drop outside the halo; a snap scores ${as.pointsPerD} per diameter of drop distance, +${as.chainPoints} per extra stone pulled in. A miss costs ${as.missPenalty} s.`;
+    $('#totalScore').textContent = `Total score: ${careerTotal().toLocaleString()}`;
     const host = $('#levelList');
     const cleared = Progress.get();
     // Continue: the last solo level started, if it still exists and is open.
@@ -2882,7 +2901,7 @@ class UI {
   }
 
   /** sc: soloScore() result. Builds the breakdown with DOM nodes (no innerHTML from data). */
-  showSoloResult(outcome, sc, isBest, prevBest, left, unlockedNow = null, chaptersNow = null) {
+  showSoloResult(outcome, sc, isBest, prevBest, left, unlockedNow = null, chaptersNow = null, total = careerTotal()) {
     $('#winnerDot').style.setProperty('--pc', outcome === 'cleared' ? 'var(--p1)' : 'var(--warn)');
     if (outcome === 'cleared') {
       $('#winnerText').textContent = 'Cleared!';
@@ -2925,6 +2944,10 @@ class UI {
       ? (prevBest == null ? 'First best score on this level.' : `New best! Previous: ${n(prevBest)}.`)
       : (prevBest == null ? 'No best score on this level yet.' : `Best on this level: ${n(prevBest)}.`);
     box.appendChild(note);
+    const tot = document.createElement('span');
+    tot.className = 'note';
+    tot.textContent = `Total score: ${n(total)}` + (isBest ? ` (+${n(sc.total - (prevBest ?? 0))})` : '');
+    box.appendChild(tot);
     for (const chId of chaptersNow || []) {              // a whole new chapter opened
       const ch = CHAPTERS.find((c) => c.id === chId), u = document.createElement('span');
       u.className = 'note'; u.textContent = `Chapter ${ch.index} · ${ch.name} unlocked`;
@@ -3202,7 +3225,7 @@ class App {
       if (Progress.clear(g.difficulty)) { unlockedNow = levelsUnlockedBy(g.difficulty, before); chaptersNow = chaptersUnlockedBy(g.difficulty, before); }
     }
     this.ui.render();                                 // clock row switches to the final total
-    this.ui.showSoloResult(g.outcome, sc, isBest, prev, g.counts[0], unlockedNow, chaptersNow);
+    this.ui.showSoloResult(g.outcome, sc, isBest, prev, g.counts[0], unlockedNow, chaptersNow, careerTotal());   // after Best.set
   }
 }
 
